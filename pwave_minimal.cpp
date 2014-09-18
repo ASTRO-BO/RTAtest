@@ -2,11 +2,16 @@
 #include <packet/PacketLibDefinition.h>
 #include <iomanip>
 #include <omp.h>
-
 #include "mac_clock_gettime.h"
 
-//#define DEBUG 1
 //#define PRINTALG 1
+//#define DEBUG 1
+//#define SAVE_RAW_DATA 1
+
+#ifdef SAVE_RAW_DATA
+#include <fstream>
+#include <sstream>
+#endif
 
 using namespace PacketLib;
 
@@ -133,6 +138,14 @@ int main(int argc, char *argv[])
 		std::cout << "pixels " << npixels[id] << std::endl;
 		std::cout << "samples " << nsamples[id] << std::endl;
 		std::cout << "data size " << p->getData()->size() << std::endl;
+#endif
+
+#ifdef SAVE_RAW_DATA
+		std::stringstream ss;
+		ss << "packet_" << id << "_" << i << "_" << npixels[id] << "_" << nsamples[id];
+		std::ofstream file(ss.str().c_str());
+		file.write((const char*)p->getData()->getStream(), p->getData()->size());
+		file.close();
 #endif
 	}
 
