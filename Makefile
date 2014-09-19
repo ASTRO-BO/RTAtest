@@ -1,4 +1,4 @@
-all: pwave_minimal pcompress
+all: pwave_minimal pcompress pdecompress
 
 pwave: pwave.cpp mac_clock_gettime.h
 	$(CXX) $(CXXFLAGS) -fopenmp pwave.cpp -o pwave -lRTAtelem -lpacket -lrt
@@ -9,5 +9,8 @@ pwave_minimal: pwave_minimal.cpp mac_clock_gettime.h
 pcompress: pcompress.cpp mac_clock_gettime.h
 	$(CXX) $(CXXFLAGS) -fopenmp pcompress.cpp -o pcompress -lpacket -lrt
 
+pdecompress: pdecompress.cpp mac_clock_gettime.h
+	$(CXX) $(CXXFLAGS) -fopenmp pdecompress.cpp -o pdecompress -lpacket -lrt
+
 clean:
-	@rm -f pwave pwave_minimal pcompress
+	@rm -f pwave pwave_minimal pcompress pdecompress
