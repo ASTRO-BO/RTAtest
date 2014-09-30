@@ -4,13 +4,13 @@
 #include <pthread.h>
 #include "mac_clock_gettime.h"
 
-//#define PRINTALG 1
 //#define DEBUG 1
+//#define PRINTALG 1
 
 using namespace PacketLib;
 
-const static int NTHREADS = 1;
-const static int NTIMES = 10000;
+const static int NTHREADS = 4;
+const static int NTIMES = 1000;
 const static int MULTIPLIER = 1;
 
 // shared mutex
@@ -82,14 +82,14 @@ void calcWaveformExtraction(byte* buffer, int npixels, int nsamples, int ws, uns
 	memcpy(timeresext, timeres, sizeof(unsigned short) * npixels);
 }
 
-void* threadFunc(void* buffin)
+void* extractWave(void* buffin)
 {
 	PacketBufferV* buff = (PacketBufferV*) buffin;
 	unsigned short* maxres = new unsigned short[3000];
 	unsigned short* timeres = new unsigned short[3000];
 	int npix_idx = 0;
 	int nsamp_idx = 0;
-	
+
 	pthread_mutex_lock(&lockp);
 	try {
 		Packet* p = ps->getPacketType("triggered_telescope1_30GEN");
@@ -100,9 +100,9 @@ void* threadFunc(void* buffin)
 		cout << "Error during encoding: ";
 		cout << e->geterror() << endl;
 	}
-	
+
 	pthread_mutex_unlock(&lockp);
-	
+
 	for(int n=0; n<NTIMES; n++)
 	{
 		pthread_mutex_lock(&lockp);
@@ -133,7 +133,63 @@ void* threadFunc(void* buffin)
 	}
 }
 
+void* compressLZ4(void* buffin)
+{
+	PacketBufferV* buff = (PacketBufferV*) buffin;
 
+	for(int n=0; n<NTIMES; n++)
+	{
+		pthread_mutex_lock(&lockp);
+		ByteStreamPtr rawPacket = buff->getNext();
+		Packet *p = ps->getPacket(rawPacket);
+#ifdef DEBUG
+		if(p->getPacketID() == 0) {
+			std::cerr << "No packet type recognized" << std::endl;
+			continue;
+		}
+#endif
+		ByteStreamPtr data = p->getData();
+		totbytes += data->size();
+
+#ifdef DEBUG
+		std::cout << "data size " << data->size() << std::endl;
+		std::cout << "totbytes " << totbytes << std::endl;
+#endif
+		pthread_mutex_unlock(&lockp);
+
+		for(int i=0; i<MULTIPLIER; i++)
+			data->compress(LZ4, 9);
+	}
+}
+
+void* decompressLZ4(void* buffin)
+{
+	PacketBufferV* buff = (PacketBufferV*) buffin;
+
+	for(int n=0; n<NTIMES; n++)
+	{
+		pthread_mutex_lock(&lockp);
+		ByteStreamPtr rawPacket = buff->getNext();
+		Packet *p = ps->getPacket(rawPacket);
+#ifdef DEBUG
+		if(p->getPacketID() == 0) {
+			std::cerr << "No packet type recognized" << std::endl;
+			continue;
+		}
+#endif
+		ByteStreamPtr data = p->getData();
+		totbytes += data->size();
+
+#ifdef DEBUG
+		std::cout << "data size " << data->size() << std::endl;
+		std::cout << "totbytes " << totbytes << std::endl;
+#endif
+		pthread_mutex_unlock(&lockp);
+
+		for(int i=0; i<MULTIPLIER; i++)
+			data->decompress(LZ4, 9, 400000);
+	}
+}
 
 int main(int argc, char *argv[])
 {
@@ -141,7 +197,26 @@ int main(int argc, char *argv[])
 	string configFileName = "rta_fadc_all.xml";
 	string ctarta;
 
+	if(argc <= 2) {
+		std::cerr << "ERROR: Please, provide the .raw and algorithm (waveextract, compresslz4 or decompresslz4)." << std::endl;
+		return 0;
+	}
 
+	// parse input algorithm
+	void* (*alg)(void*);
+	std::string algorithmStr(argv[2]);
+	if(algorithmStr.compare("waveextract") == 0)
+		alg = &extractWave;
+	else if(algorithmStr.compare("compresslz4") == 0)
+		alg = &compressLZ4;
+	else if(algorithmStr.compare("decompresslz4") == 0)
+		alg = &decompressLZ4;
+	else
+	{
+		std::cerr << "Wrong algorithm: " << argv[2] << std::endl;
+		std::cerr << "Please, provide the .raw and algorithm (waveextract, compresslz4 or decompresslz4)." << std::endl;
+		return 0;
+	}
 
 	PacketBufferV buff(configFileName, argv[1]);
 	buff.load();
@@ -165,7 +240,7 @@ int main(int argc, char *argv[])
 	pthread_t tid[NTHREADS];
 	for(int i=0; i<NTHREADS; i++)
 	{
-        int err = pthread_create(&(tid[i]), NULL, &threadFunc, &buff);
+		int err = pthread_create(&(tid[i]), NULL, alg, &buff);
         if (err != 0)
 			std::cout << "Cannot create thread :[" << strerror(err) << "] " << std::endl;
 	}
