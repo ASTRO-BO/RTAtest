@@ -1,5 +1,6 @@
 pwave
 pwave_minimal
+pwave_pthread
 pcompress
 pdecompress
 packet*
