@@ -1,10 +1,10 @@
 pwave
 pwave_minimal
-pwave_pthread
 pcompress
 pdecompress
 packet*
 threads
+test_pthread
 CTAHeaderGEN.header
 rta_fadc_all.stream
 triggered_telescope1_30GEN.packet
