@@ -92,7 +92,7 @@ void* threadFunc(void* buffin)
 	
 	pthread_mutex_lock(&lockp);
 	try {
-		Packet* p = ps->getPacketType("CTA Triggered Sim Telescope 30 samples");
+		Packet* p = ps->getPacketType("triggered_telescope1_30GEN");
 		npix_idx = p->getPacketSourceDataField()->getFieldIndex("Number of pixels");
 		nsamp_idx = p->getPacketSourceDataField()->getFieldIndex("Number of samples");
 	} catch (PacketException* e)
@@ -108,6 +108,12 @@ void* threadFunc(void* buffin)
 		pthread_mutex_lock(&lockp);
 		ByteStreamPtr rawPacket = buff->getNext();
 		Packet *p = ps->getPacket(rawPacket);
+#ifdef DEBUG
+		if(p->getPacketID() == 0) {
+			std::cerr << "No packet type recognized" << std::endl;
+			continue;
+		}
+#endif
 		ByteStreamPtr data = p->getData();
 		byte* rawdata = data->getStream();
 		int npix = p->getPacketSourceDataField()->getFieldValue(npix_idx);
@@ -132,27 +138,10 @@ void* threadFunc(void* buffin)
 int main(int argc, char *argv[])
 {
 	struct timespec start, stop;
-	string configFileName = "/share/rtatelem/rta_fadc_all.stream";
+	string configFileName = "rta_fadc_all.xml";
 	string ctarta;
 
-	if(argc > 1) {
-		/// The Packet containing the FADC value of each triggered telescope
-		const char* home = getenv("CTARTA");
 
-		if (!home)
-		{
-			std::cerr << "ERROR: CTARTA environment variable is not defined." << std::endl;
-			return 0;
-		}
-
-		ctarta = home;
-
-	} else {
-			cerr << "ERROR: Please, provide the .raw" << std::endl;
-			return 0;
-	}
-
-	configFileName = ctarta + configFileName;
 
 	PacketBufferV buff(configFileName, argv[1]);
 	buff.load();
