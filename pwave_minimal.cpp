@@ -123,37 +123,41 @@ int main(int argc, char *argv[])
 		ByteStreamPtr rawPacket = buff.getNext();
 		Packet *p = ps.getPacket(rawPacket);
 
-		int id = p->getPacketID();
-		if(id == 0)
+		int idx = p->getPacketID();
+		if(idx == 0)
 			continue;
 
-		npixels[id] = p->getPacketSourceDataField()->getFieldValue("Number of pixels");
-		nsamples[id] = p->getPacketSourceDataField()->getFieldValue("Number of samples");
-		streams[id].push_back(p->getData());
-		totbytes[id] += p->getData()->size();
+		int evtnum = p->getPacketSourceDataField()->getFieldValue_32i("eventNumber");
+		int id = p->getPacketSourceDataField()->getFieldValue("TelescopeID");
+		npixels[idx] = p->getPacketSourceDataField()->getFieldValue("Number of pixels");
+		nsamples[idx] = p->getPacketSourceDataField()->getFieldValue("Number of samples");
+		streams[idx].push_back(p->getData());
+		totbytes[idx] += p->getData()->size();
 
 #ifdef DEBUG
 		std::cout << "i " << i << std::endl;
-		std::cout << "id " << id << std::endl;
-		std::cout << "pixels " << npixels[id] << std::endl;
-		std::cout << "samples " << nsamples[id] << std::endl;
+		std::cout << "event number " << evtnum << std::endl;
+		std::cout << "id " << idx << std::endl;
+		std::cout << "idx " << idx << std::endl;
+		std::cout << "pixels " << npixels[idx] << std::endl;
+		std::cout << "samples " << nsamples[idx] << std::endl;
 		std::cout << "data size " << p->getData()->size() << std::endl;
 #endif
 
 #ifdef SAVE_RAW_DATA
 		std::stringstream ss;
-		ss << "packet_" << id << "_" << i << "_" << npixels[id] << "_" << nsamples[id];
+		ss << "packetdata_" << evtnum << "_" << id << "_" << npixels[idx] << "_" << nsamples[idx];
 		std::ofstream file(ss.str().c_str());
 		file.write((const char*)p->getData()->getStream(), p->getData()->size());
 		file.close();
 #endif
 	}
 
-	const int ntimes = 100;
+	const int ntimes = 1;
 	const int ID = 1;
 
 #ifdef DEBUG
-	std::cout << "Using id " << ID << std::endl;
+	std::cout << "Using idx " << ID << std::endl;
 	std::cout << "ntimes " << ntimes << std::endl;
 	std::cout << "npackets " << streams[ID].size() << std::endl;
 	std::cout << "pixels " << npixels[ID] << std::endl;
