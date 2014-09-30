@@ -9,12 +9,12 @@
 
 using namespace PacketLib;
 
-const static int NTHREADS = 4;
+const static int NTHREADS = 1;
 const static int NTIMES = 10000;
-const static int MULTIPLIER = 3;
+const static int MULTIPLIER = 1;
 
 // shared mutex
-pthread_mutex_t lock;
+pthread_mutex_t lockp;
 PacketStream* ps;
 unsigned long int totbytes = 0;
 
@@ -87,16 +87,31 @@ void* threadFunc(void* buffin)
 	PacketBufferV* buff = (PacketBufferV*) buffin;
 	unsigned short* maxres = new unsigned short[3000];
 	unsigned short* timeres = new unsigned short[3000];
-
+	int npix_idx = 0;
+	int nsamp_idx = 0;
+	
+	pthread_mutex_lock(&lockp);
+	try {
+		Packet* p = ps->getPacketType("CTA Triggered Sim Telescope 30 samples");
+		npix_idx = p->getPacketSourceDataField()->getFieldIndex("Number of pixels");
+		nsamp_idx = p->getPacketSourceDataField()->getFieldIndex("Number of samples");
+	} catch (PacketException* e)
+	{
+		cout << "Error during encoding: ";
+		cout << e->geterror() << endl;
+	}
+	
+	pthread_mutex_unlock(&lockp);
+	
 	for(int n=0; n<NTIMES; n++)
 	{
-		pthread_mutex_lock(&lock);
+		pthread_mutex_lock(&lockp);
 		ByteStreamPtr rawPacket = buff->getNext();
 		Packet *p = ps->getPacket(rawPacket);
 		ByteStreamPtr data = p->getData();
 		byte* rawdata = data->getStream();
-		int npix = p->getPacketSourceDataField()->getFieldValue("Number of pixels");
-		int nsamp = p->getPacketSourceDataField()->getFieldValue("Number of samples");
+		int npix = p->getPacketSourceDataField()->getFieldValue(npix_idx);
+		int nsamp = p->getPacketSourceDataField()->getFieldValue(nsamp_idx);
 		totbytes += data->size();
 
 #ifdef DEBUG
@@ -105,12 +120,14 @@ void* threadFunc(void* buffin)
 		std::cout << "data size " << data->size() << std::endl;
 		std::cout << "totbytes " << totbytes << std::endl;
 #endif
-		pthread_mutex_unlock(&lock);
+		pthread_mutex_unlock(&lockp);
 
 		for(int i=0; i<MULTIPLIER; i++)
 			calcWaveformExtraction(rawdata, npix, nsamp, 6, maxres, timeres);
 	}
 }
+
+
 
 int main(int argc, char *argv[])
 {
@@ -144,7 +161,7 @@ int main(int argc, char *argv[])
 
 	// init shared variables
 	ps = new PacketStream(configFileName.c_str());
-    if(pthread_mutex_init(&lock, NULL) != 0)
+    if(pthread_mutex_init(&lockp, NULL) != 0)
     {
         std::cout << "Mutex init failed" << std::endl;
         return 0;
@@ -174,7 +191,7 @@ int main(int argc, char *argv[])
 
 	// destroy shared variables
 	delete ps;
-    pthread_mutex_destroy(&lock);
+    pthread_mutex_destroy(&lockp);
 
 	return 1;
 }
