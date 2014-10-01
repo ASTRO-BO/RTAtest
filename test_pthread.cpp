@@ -11,9 +11,9 @@
 
 using namespace PacketLib;
 
-const static int NTHREADS = 4;
-const static int NTIMES = 100000;
-const static int PACKET_NUM = 1;
+const static int NTHREADS = 8;
+const static long NTIMES = 100000;
+const static long PACKET_NUM = 1;
 const static int COMPRESSION_LEVEL = 1;
 
 // shared variables
@@ -22,27 +22,57 @@ PacketStream* ps;
 unsigned long int totbytes = 0;
 unsigned long int totbytescomp = 0;
 unsigned long int totbytesdecomp = 0;
-std::vector<ByteStreamPtr> sharedBuffer;
+
+typedef struct dataBufferElementStr {
+	ByteStreamPtr data;
+	int npix;
+	int nsamp;
+} DataBufferElement;
+
+//a buffer that contains the data and some infos about the data
+std::vector<DataBufferElement> sharedDataAndInfoBuffer;
 int sharedIndex = 0;
 
-std::vector<ByteStreamPtr> createBuffer(PacketBufferV* buff)
-{
-	std::vector<ByteStreamPtr> outBuff;
+//a buffer that contains the data
+std::vector<ByteStreamPtr> sharedDataBuffer;
 
+std::vector<DataBufferElement> createBuffer(PacketBufferV* buff)
+{
+	int npix_idx = 0;
+	int nsamp_idx = 0;
+	std::vector<DataBufferElement> outBuff;
+	try {
+		Packet *p = ps->getPacketType("triggered_telescope1_30GEN");
+		npix_idx = p->getPacketSourceDataField()->getFieldIndex("Number of pixels");
+		nsamp_idx = p->getPacketSourceDataField()->getFieldIndex("Number of samples");
+	} catch (PacketException* e)
+	{
+		cout << "Error during encoding: ";
+		cout << e->geterror() << endl;
+	}
 	for(int i=0; i<buff->size(); i++)
 	{
 		ByteStreamPtr rawPacket = buff->getNext();
 		Packet *p = ps->getPacket(rawPacket);
+		// get npixel and nsamples
+
+		int npix = p->getPacketSourceDataField()->getFieldValue(npix_idx);
+		int nsamp = p->getPacketSourceDataField()->getFieldValue(nsamp_idx);
+
 #ifdef DEBUG
 		if(p->getPacketID() == 0) {
 			std::cerr << "No packet type recognized" << std::endl;
 			continue;
 		}
 #endif
-		ByteStreamPtr data = p->getData();
-		outBuff.push_back(data);
-	}
 
+		DataBufferElement elem;
+		elem.data = p->getData();
+		elem.npix = npix;
+		elem.nsamp = nsamp;
+		outBuff.push_back(elem);
+	}
+	
 	return outBuff;
 }
 
@@ -120,22 +150,8 @@ void* extractWave(void* buffin)
 {
 	unsigned short* maxres = new unsigned short[3000];
 	unsigned short* timeres = new unsigned short[3000];
-	int npix_idx = 0;
-	int nsamp_idx = 0;
-	Packet* p = 0;
 
 	// load packet type (once per thread)
-	pthread_mutex_lock(&lockp);
-	try {
-		p = ps->getPacketType("triggered_telescope1_30GEN");
-		npix_idx = p->getPacketSourceDataField()->getFieldIndex("Number of pixels");
-		nsamp_idx = p->getPacketSourceDataField()->getFieldIndex("Number of samples");
-	} catch (PacketException* e)
-	{
-		cout << "Error during encoding: ";
-		cout << e->geterror() << endl;
-	}
-	pthread_mutex_unlock(&lockp);
 
 	ByteStreamPtr localBuffer[PACKET_NUM];
 	int npix[PACKET_NUM];
@@ -146,14 +162,18 @@ void* extractWave(void* buffin)
 		pthread_mutex_lock(&lockp);
 		for(int m=0; m<PACKET_NUM; m++)
 		{
-			ByteStreamPtr data = sharedBuffer[sharedIndex];
-			sharedIndex = (sharedIndex+1) % sharedBuffer.size();
+			ByteStreamPtr data = sharedDataAndInfoBuffer[sharedIndex].data;
+			localBuffer[m] = data;
+			npix[m] = sharedDataAndInfoBuffer[sharedIndex].npix;
+			nsamp[m] = sharedDataAndInfoBuffer[sharedIndex].nsamp;
+			
+			sharedIndex = (sharedIndex+1) % sharedDataAndInfoBuffer.size();
 			totbytes += data->size();
 #ifdef DEBUG
 			std::cout << "data size " << data->size() << std::endl;
 			std::cout << "totbytes " << totbytes << std::endl;
 #endif
-			localBuffer[m] = data;
+			
 		}
 		pthread_mutex_unlock(&lockp);
 
@@ -161,15 +181,10 @@ void* extractWave(void* buffin)
 		{
 			byte* rawdata = localBuffer[m]->getStream();
 
-			// get npixel and nsamples
-			pthread_mutex_lock(&lockp);
-			npix[m] = p->getPacketSourceDataField()->getFieldValue(npix_idx);
-			nsamp[m] = p->getPacketSourceDataField()->getFieldValue(nsamp_idx);
-			pthread_mutex_unlock(&lockp);
 #ifdef DEBUG
-			std::cout << "npixels " << pix << std::endl;
-			std::cout << "nsamples " << samp << std::endl;
-			std::cout << "data size " << data->size() << std::endl;
+			std::cout << "npixels " << npix[m] << std::endl;
+			std::cout << "nsamples " << nsamp[m] << std::endl;
+			std::cout << "data size " << localBuffer[m]->size() << std::endl;
 			std::cout << "totbytes " << totbytes << std::endl;
 #endif
 			// extract waveform
@@ -177,6 +192,55 @@ void* extractWave(void* buffin)
 		}
 	}
 
+	return 0;
+}
+
+void* extractWavePacket(void* buffin)
+{
+	unsigned short* maxres = new unsigned short[3000];
+	unsigned short* timeres = new unsigned short[3000];
+	
+	// load packet type (once per thread)
+	
+	ByteStreamPtr localBuffer[PACKET_NUM];
+	int npix[PACKET_NUM];
+	int nsamp[PACKET_NUM];
+	for(int n=0; n<NTIMES; n++)
+	{
+		// copy PACKET_NUM packets data locally
+		pthread_mutex_lock(&lockp);
+		for(int m=0; m<PACKET_NUM; m++)
+		{
+			ByteStreamPtr data = sharedDataAndInfoBuffer[sharedIndex].data;
+			localBuffer[m] = data;
+			npix[m] = sharedDataAndInfoBuffer[sharedIndex].npix;
+			nsamp[m] = sharedDataAndInfoBuffer[sharedIndex].nsamp;
+			
+			sharedIndex = (sharedIndex+1) % sharedDataAndInfoBuffer.size();
+			totbytes += data->size();
+#ifdef DEBUG
+			std::cout << "data size " << data->size() << std::endl;
+			std::cout << "totbytes " << totbytes << std::endl;
+#endif
+			
+		}
+		pthread_mutex_unlock(&lockp);
+		
+		for(int m=0; m<PACKET_NUM; m++)
+		{
+			byte* rawdata = localBuffer[m]->getStream();
+			
+#ifdef DEBUG
+			std::cout << "npixels " << npix[m] << std::endl;
+			std::cout << "nsamples " << nsamp[m] << std::endl;
+			std::cout << "data size " << localBuffer[m]->size() << std::endl;
+			std::cout << "totbytes " << totbytes << std::endl;
+#endif
+			// extract waveform
+			calcWaveformExtraction(rawdata, npix[m], nsamp[m], 6, maxres, timeres);
+		}
+	}
+	
 	return 0;
 }
 
@@ -193,8 +257,8 @@ void* compressLZ4(void* buffin)
 		pthread_mutex_lock(&lockp);
 		for(int m=0; m<PACKET_NUM; m++)
 		{
-			ByteStreamPtr data = sharedBuffer[sharedIndex];
-			sharedIndex = (sharedIndex+1) % sharedBuffer.size();
+			ByteStreamPtr data = sharedDataAndInfoBuffer[sharedIndex].data;
+			sharedIndex = (sharedIndex+1) % sharedDataAndInfoBuffer.size();
 			totbytes += data->size();
 #ifdef DEBUG
 			std::cout << "data size " << data->size() << std::endl;
@@ -234,8 +298,8 @@ void* decompressLZ4(void* buffin)
 		pthread_mutex_lock(&lockp);
 		for(int m=0; m<PACKET_NUM; m++)
 		{
-			ByteStreamPtr data = sharedBuffer[sharedIndex];
-			sharedIndex = (sharedIndex+1) % sharedBuffer.size();
+			ByteStreamPtr data = sharedDataBuffer[sharedIndex];
+			sharedIndex = (sharedIndex+1) % sharedDataBuffer.size();
 			totbytes += data->size();
 #ifdef DEBUG
 			std::cout << "data size " << data->size() << std::endl;
@@ -309,8 +373,8 @@ void* compressZlib(void* buffin)
 		pthread_mutex_lock(&lockp);
 		for(int m=0; m<PACKET_NUM; m++)
 		{
-			ByteStreamPtr data = sharedBuffer[sharedIndex];
-			sharedIndex = (sharedIndex+1) % sharedBuffer.size();
+			ByteStreamPtr data = sharedDataAndInfoBuffer[sharedIndex].data;
+			sharedIndex = (sharedIndex+1) % sharedDataAndInfoBuffer.size();
 			totbytes += data->size();
 #ifdef DEBUG
 			std::cout << "data size " << data->size() << std::endl;
@@ -364,8 +428,8 @@ void* decompressZlib(void* buffin)
 		pthread_mutex_lock(&lockp);
 		for(int m=0; m<PACKET_NUM; m++)
 		{
-			ByteStreamPtr data = sharedBuffer[sharedIndex];
-			sharedIndex = (sharedIndex+1) % sharedBuffer.size();
+			ByteStreamPtr data = sharedDataBuffer[sharedIndex];
+			sharedIndex = (sharedIndex+1) % sharedDataBuffer.size();
 			totbytes += data->size();
 #ifdef DEBUG
 			std::cout << "data size " << data->size() << std::endl;
@@ -493,21 +557,21 @@ int main(int argc, char *argv[])
 	// if we are testing decompress we create the buffers for testing
 	if(algorithmStr.compare("decompresslz4") == 0)
 	{
-		sharedBuffer = createLZ4Buffer(&buff);
+		sharedDataBuffer = createLZ4Buffer(&buff);
 		compType = "lz4";
 	}
 	else if(algorithmStr.compare("decompressZlib") == 0)
 	{
-		sharedBuffer = createZlibBuffer(&buff);
+		sharedDataBuffer = createZlibBuffer(&buff);
 		compType = "zlib";
 	}
 	else // otherwise a normal buffer
 	{
-		sharedBuffer = createBuffer(&buff);
+		sharedDataAndInfoBuffer = createBuffer(&buff);
 	}
 
 	if(compType.compare(""))
-		std::cout << "Loaded " << sharedBuffer.size() << " elements into " << compType << " buffer" << std::endl;
+		std::cout << "Loaded " << sharedDataBuffer.size() << " elements into " << compType << " buffer" << std::endl;
 
 	// launch pthreads and timer
 	clock_gettime(CLOCK_MONOTONIC, &start);
