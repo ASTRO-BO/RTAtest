@@ -6,6 +6,7 @@
 #include <zlib.h>
 
 //#define DEBUG 1
+#define PRINT_COMPRESS_SIZE 1
 //#define PRINTALG 1
 
 using namespace PacketLib;
@@ -13,11 +14,13 @@ using namespace PacketLib;
 const static int NTHREADS = 4;
 const static int NTIMES = 1000;
 const static int MULTIPLIER = 1;
+const static int COMPRESSION_LEVEL = 1;
 
 // shared mutex
 pthread_mutex_t lockp;
 PacketStream* ps;
 unsigned long int totbytes = 0;
+unsigned long int totbytescomp = 0;
 
 void calcWaveformExtraction(byte* buffer, int npixels, int nsamples, int ws, unsigned short* maxresext, unsigned short* timeresext) {
 	word *b = (word*) buffer; //should be pedestal subtractred
@@ -159,7 +162,17 @@ void* compressLZ4(void* buffin)
 		pthread_mutex_unlock(&lockp);
 
 		for(int i=0; i<MULTIPLIER; i++)
-			data->compress(LZ4, 9);
+		{
+			ByteStreamPtr datacomp = data->compress(LZ4, 9);
+#ifdef PRINT_COMPRESS_SIZE
+			if(i == 0)
+			{
+				pthread_mutex_lock(&lockp);
+				totbytescomp += datacomp->size();
+				pthread_mutex_unlock(&lockp);
+			}
+#endif
+		}
 	}
 }
 
@@ -188,7 +201,7 @@ void* decompressLZ4(void* buffin)
 		pthread_mutex_unlock(&lockp);
 
 		for(int i=0; i<MULTIPLIER; i++)
-			data->decompress(LZ4, 9, 400000);
+			data->decompress(LZ4, COMPRESSION_LEVEL, 400000);
 	}
 }
 
@@ -217,10 +230,6 @@ void* compressZlib(void* buffin)
 #endif
 		ByteStreamPtr data = p->getData();
 		totbytes += data->size();
-		defstream.avail_in = (uInt)data->size();
-		defstream.next_in = (Bytef *)data->getStream();
-		defstream.avail_out = (uInt) SIZEBUFF;
-		defstream.next_out = (Bytef *)outbuff;
 #ifdef DEBUG
 		std::cout << "data size " << data->size() << std::endl;
 		std::cout << "totbytes " << totbytes << std::endl;
@@ -229,10 +238,21 @@ void* compressZlib(void* buffin)
 
 		for(int i=0; i<MULTIPLIER; i++)
 		{
-			deflateInit(&defstream, Z_DEFAULT_COMPRESSION);
+			defstream.avail_in = (uInt)data->size();
+			defstream.next_in = (Bytef *)data->getStream();
+			defstream.avail_out = (uInt) SIZEBUFF;
+			defstream.next_out = (Bytef *)outbuff;
+			deflateInit(&defstream, COMPRESSION_LEVEL);
 			deflate(&defstream, Z_FINISH);
 			deflateEnd(&defstream);
-//			printf("Deflated size is: %lu\n", (char*)defstream.next_out - b);
+#ifdef PRINT_COMPRESS_SIZE
+			if(i == 0)
+			{
+				pthread_mutex_lock(&lockp);
+				totbytescomp += ((unsigned char*) defstream.next_out - outbuff);
+				pthread_mutex_unlock(&lockp);
+			}
+#endif
 		}
 	}
 }
@@ -283,6 +303,7 @@ int main(int argc, char *argv[])
 	std::cout << "Number of threads: " << NTHREADS << std::endl;
 	std::cout << "Number of packet per threads: " << NTIMES << std::endl;
 	std::cout << "Packet size multiplier: " << MULTIPLIER << std::endl;
+	std::cout << "Compression level: " << COMPRESSION_LEVEL << std::endl;
 
 	// launch pthreads and timer
 	clock_gettime(CLOCK_MONOTONIC, &start);
@@ -299,8 +320,16 @@ int main(int argc, char *argv[])
 
 	// get results
 	double time = timediff(start, stop);
+	float sizeMB = (totbytes * MULTIPLIER / 1000000.0);
 	std::cout << "Result: it took  " << time << " s" << std::endl;
-	std::cout << "Result: rate: " << setprecision(10) << (totbytes * MULTIPLIER / 1000000) / time << " MiB/s" << std::endl;
+	std::cout << "Result: rate: " << setprecision(10) << sizeMB / time << " MB/s" << std::endl;
+	std::cout << "Overall buffer size: " << setprecision(10) << sizeMB << std::endl;
+
+#ifdef PRINT_COMPRESS_SIZE
+	float sizecompMB = (totbytescomp * MULTIPLIER / 1000000.0);
+	std::cout << "Overall compressed buffer size: " << setprecision(10) << sizecompMB << std::endl;
+	std::cout << "Compression factor: " << sizeMB / sizecompMB << std::endl;
+#endif
 
 	// destroy shared variables
 	delete ps;
