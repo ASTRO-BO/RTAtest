@@ -12,7 +12,7 @@
 using namespace PacketLib;
 
 const static int NTHREADS = 4;
-const static int NTIMES = 10000;
+const static int NTIMES = 100000;
 const static int PACKET_NUM = 1;
 const static int COMPRESSION_LEVEL = 1;
 
@@ -112,6 +112,8 @@ void calcWaveformExtraction(byte* buffer, int npixels, int nsamples, int ws, uns
 
 	memcpy(maxresext, maxres, sizeof(unsigned short) * npixels);
 	memcpy(timeresext, timeres, sizeof(unsigned short) * npixels);
+	delete[] maxres;
+	delete[] timeres;
 }
 
 void* extractWave(void* buffin)
