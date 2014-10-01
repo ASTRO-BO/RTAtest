@@ -11,12 +11,13 @@
 
 using namespace PacketLib;
 
-const static int NTHREADS = 8;
+const static int NTHREADS = 4;
 const static long NTIMES = 10000;
 const static long PACKET_NUM = 1;
 const static int COMPRESSION_LEVEL = 1;
 
 // shared variables
+string configFileName;
 pthread_mutex_t lockp;
 PacketStream* ps;
 unsigned long int totbytes = 0;
@@ -197,10 +198,25 @@ void* extractWaveData(void* buffin)
 
 void* extractWavePacket(void* buffin)
 {
+	PacketBufferV* buff = (PacketBufferV*) buffin;
 	unsigned short* maxres = new unsigned short[3000];
 	unsigned short* timeres = new unsigned short[3000];
-	
+	int npix_idx = 0;
+	int nsamp_idx = 0;
 	// load packet type (once per thread)
+	PacketStream* ps;
+	pthread_mutex_lock(&lockp);
+	try {
+		ps = new PacketStream(configFileName.c_str());
+		Packet *p = ps->getPacketType("triggered_telescope1_30GEN");
+		npix_idx = p->getPacketSourceDataField()->getFieldIndex("Number of pixels");
+		nsamp_idx = p->getPacketSourceDataField()->getFieldIndex("Number of samples");
+	} catch (PacketException* e)
+	{
+		cout << "Error during extractWavePacket: ";
+		cout << e->geterror() << endl;
+	}
+	pthread_mutex_unlock(&lockp);
 	
 	ByteStreamPtr localBuffer[PACKET_NUM];
 	int npix[PACKET_NUM];
@@ -211,36 +227,34 @@ void* extractWavePacket(void* buffin)
 		pthread_mutex_lock(&lockp);
 		for(int m=0; m<PACKET_NUM; m++)
 		{
-			ByteStreamPtr data = sharedDataAndInfoBuffer[sharedIndex].data;
-			localBuffer[m] = data;
-			npix[m] = sharedDataAndInfoBuffer[sharedIndex].npix;
-			nsamp[m] = sharedDataAndInfoBuffer[sharedIndex].nsamp;
-			
-			sharedIndex = (sharedIndex+1) % sharedDataAndInfoBuffer.size();
-			totbytes += data->size();
-#ifdef DEBUG
-			std::cout << "data size " << data->size() << std::endl;
-			std::cout << "totbytes " << totbytes << std::endl;
-#endif
+			ByteStreamPtr rawPacket = buff->getNext();
+			localBuffer[m] = rawPacket;
 			
 		}
 		pthread_mutex_unlock(&lockp);
 		
 		for(int m=0; m<PACKET_NUM; m++)
 		{
-			byte* rawdata = localBuffer[m]->getStream();
+			ByteStreamPtr rawPacket = localBuffer[m];
+			Packet *p = ps->getPacket(rawPacket);
+			// get npixel and nsamples
 			
+			int npix = p->getPacketSourceDataField()->getFieldValue(npix_idx);
+			int nsamp = p->getPacketSourceDataField()->getFieldValue(nsamp_idx);
+			ByteStreamPtr data = p->getData();
+			totbytes += data->size();
+			byte* rawdata = data->getStream();
 #ifdef DEBUG
-			std::cout << "npixels " << npix[m] << std::endl;
-			std::cout << "nsamples " << nsamp[m] << std::endl;
-			std::cout << "data size " << localBuffer[m]->size() << std::endl;
+			std::cout << "npixels " << npix << std::endl;
+			std::cout << "nsamples " << nsamp << std::endl;
+			std::cout << "data size " << data->size() << std::endl;
 			std::cout << "totbytes " << totbytes << std::endl;
 #endif
 			// extract waveform
-			calcWaveformExtraction(rawdata, npix[m], nsamp[m], 6, maxres, timeres);
+			calcWaveformExtraction(rawdata, npix, nsamp, 6, maxres, timeres);
 		}
 	}
-	
+	delete ps;
 	return 0;
 }
 
@@ -506,8 +520,7 @@ std::vector<ByteStreamPtr> createZlibBuffer(PacketBufferV* buff)
 int main(int argc, char *argv[])
 {
 	struct timespec start, stop;
-	string configFileName = "rta_fadc_all.xml";
-	string ctarta;
+	configFileName = "rta_fadc_all.xml";
 
 	if(argc <= 2) {
 		std::cerr << "ERROR: Please, provide the .raw and algorithm (waveextract, compresslz4, decompresslz4, compressZlib or decompressZlib)." << std::endl;
@@ -566,6 +579,10 @@ int main(int argc, char *argv[])
 	{
 		sharedDataBuffer = createZlibBuffer(&buff);
 		compType = "zlib";
+	}
+	else if(algorithmStr.compare("waveextractpacket") == 0)
+	{
+		;
 	}
 	else // otherwise a normal buffer
 	{
