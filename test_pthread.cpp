@@ -12,7 +12,7 @@
 using namespace PacketLib;
 
 const static int NTHREADS = 8;
-const static long NTIMES = 100000;
+const static long NTIMES = 10000;
 const static long PACKET_NUM = 1;
 const static int COMPRESSION_LEVEL = 1;
 
@@ -146,7 +146,7 @@ void calcWaveformExtraction(byte* buffer, int npixels, int nsamples, int ws, uns
 	delete[] timeres;
 }
 
-void* extractWave(void* buffin)
+void* extractWaveData(void* buffin)
 {
 	unsigned short* maxres = new unsigned short[3000];
 	unsigned short* timeres = new unsigned short[3000];
@@ -517,8 +517,10 @@ int main(int argc, char *argv[])
 	// parse input algorithm
 	void* (*alg)(void*);
 	std::string algorithmStr(argv[2]);
-	if(algorithmStr.compare("waveextract") == 0)
-		alg = &extractWave;
+	if(algorithmStr.compare("waveextractdata") == 0)
+		alg = &extractWaveData;
+	else if(algorithmStr.compare("waveextractpacket") == 0)
+		alg = &extractWavePacket;
 	else if(algorithmStr.compare("compresslz4") == 0)
 		alg = &compressLZ4;
 	else if(algorithmStr.compare("decompresslz4") == 0)
@@ -530,7 +532,7 @@ int main(int argc, char *argv[])
 	else
 	{
 		std::cerr << "Wrong algorithm: " << argv[2] << std::endl;
-		std::cerr << "Please, provide the .raw and algorithm (waveextract, compresslz4, decompresslz4, compressZlib or decompressZlib)." << std::endl;
+		std::cerr << "Please, provide the .raw and algorithm (waveextractdata, compresslz4, decompresslz4, compressZlib or decompressZlib)." << std::endl;
 		return 0;
 	}
 	std::cout << "Using algorithm: " << algorithmStr << std::endl;
