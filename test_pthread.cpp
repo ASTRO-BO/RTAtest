@@ -1,6 +1,7 @@
 #include <packet/PacketBufferV.h>
 #include <packet/PacketLibDefinition.h>
 #include <iomanip>
+#include <vector>
 #include <pthread.h>
 #include "mac_clock_gettime.h"
 #include <zlib.h>
@@ -16,11 +17,14 @@ const static int NTIMES = 1000;
 const static int MULTIPLIER = 1;
 const static int COMPRESSION_LEVEL = 1;
 
-// shared mutex
+// shared variables
 pthread_mutex_t lockp;
 PacketStream* ps;
 unsigned long int totbytes = 0;
 unsigned long int totbytescomp = 0;
+unsigned long int totbytesdecomp = 0;
+std::vector<ByteStreamPtr> sharedBuffer;
+int sharedIndex = 0;
 
 void calcWaveformExtraction(byte* buffer, int npixels, int nsamples, int ws, unsigned short* maxresext, unsigned short* timeresext) {
 	word *b = (word*) buffer; //should be pedestal subtractred
@@ -176,13 +180,12 @@ void* compressLZ4(void* buffin)
 	}
 }
 
-void* decompressLZ4(void* buffin)
+std::vector<ByteStreamPtr> createLZ4Buffer(PacketBufferV* buff)
 {
-	PacketBufferV* buff = (PacketBufferV*) buffin;
+	std::vector<ByteStreamPtr> compbuff;
 
-	for(int n=0; n<NTIMES; n++)
+	for(int i=0; i<buff->size(); i++)
 	{
-		pthread_mutex_lock(&lockp);
 		ByteStreamPtr rawPacket = buff->getNext();
 		Packet *p = ps->getPacket(rawPacket);
 #ifdef DEBUG
@@ -192,8 +195,23 @@ void* decompressLZ4(void* buffin)
 		}
 #endif
 		ByteStreamPtr data = p->getData();
-		totbytes += data->size();
+		ByteStreamPtr datacomp = data->compress(LZ4, COMPRESSION_LEVEL);
+		compbuff.push_back(datacomp);
+	}
 
+	return compbuff;
+}
+
+void* decompressLZ4(void* buffin)
+{
+	PacketBufferV* buff = (PacketBufferV*) buffin;
+
+	for(int n=0; n<NTIMES; n++)
+	{
+		pthread_mutex_lock(&lockp);
+		ByteStreamPtr data = sharedBuffer[sharedIndex];
+		sharedIndex = (sharedIndex+1) % sharedBuffer.size();
+		totbytes += data->size();
 #ifdef DEBUG
 		std::cout << "data size " << data->size() << std::endl;
 		std::cout << "totbytes " << totbytes << std::endl;
@@ -201,8 +219,56 @@ void* decompressLZ4(void* buffin)
 		pthread_mutex_unlock(&lockp);
 
 		for(int i=0; i<MULTIPLIER; i++)
-			data->decompress(LZ4, COMPRESSION_LEVEL, 400000);
+		{
+			ByteStreamPtr datadecomp = data->decompress(LZ4, COMPRESSION_LEVEL, 400000);
+#ifdef PRINT_COMPRESS_SIZE
+			if(i == 0)
+			{
+				pthread_mutex_lock(&lockp);
+				totbytesdecomp += datadecomp->size();
+				pthread_mutex_unlock(&lockp);
+			}
+#endif
+		}
 	}
+}
+
+std::vector<ByteStreamPtr> createZlibBuffer(PacketBufferV* buff)
+{
+	std::vector<ByteStreamPtr> compbuff;
+	for(int i=0; i<buff->size(); i++)
+	{
+		ByteStreamPtr rawPacket = buff->getNext();
+		Packet *p = ps->getPacket(rawPacket);
+#ifdef DEBUG
+		if(p->getPacketID() == 0) {
+			std::cerr << "No packet type recognized" << std::endl;
+			continue;
+		}
+#endif
+		ByteStreamPtr data = p->getData();
+
+		z_stream defstream;
+		defstream.zalloc = Z_NULL;
+		defstream.zfree = Z_NULL;
+		defstream.opaque = Z_NULL;
+		defstream.avail_in = (uInt)data->size();
+		defstream.next_in = (Bytef *)data->getStream();
+		const size_t SIZEBUF = 400000;
+		defstream.avail_out = (uInt) SIZEBUF;
+		byte* outbuff = new byte[SIZEBUF];
+		defstream.next_out = (Bytef *)outbuff;
+
+		deflateInit(&defstream, COMPRESSION_LEVEL);
+		deflate(&defstream, Z_FINISH);
+		deflateEnd(&defstream);
+
+		size_t compSize = ((unsigned char*) defstream.next_out - outbuff);
+		ByteStreamPtr out = ByteStreamPtr(new ByteStream(outbuff, compSize, data->isBigendian()));
+		compbuff.push_back(out);
+	}
+
+	return compbuff;
 }
 
 void* compressZlib(void* buffin)
@@ -257,6 +323,52 @@ void* compressZlib(void* buffin)
 	}
 }
 
+void* decompressZlib(void* buffin)
+{
+	PacketBufferV* buff = (PacketBufferV*) buffin;
+
+	const size_t SIZEBUFF = 400000;
+	unsigned char outbuff[SIZEBUFF];
+
+	z_stream infstream;
+	infstream.zalloc = Z_NULL;
+	infstream.zfree = Z_NULL;
+	infstream.opaque = Z_NULL;
+
+	for(int n=0; n<NTIMES; n++)
+	{
+		pthread_mutex_lock(&lockp);
+		ByteStreamPtr data = sharedBuffer[sharedIndex];
+		sharedIndex = (sharedIndex+1) % sharedBuffer.size();
+		totbytes += data->size();
+#ifdef DEBUG
+		std::cout << "data size " << data->size() << std::endl;
+		std::cout << "totbytes " << totbytes << std::endl;
+#endif
+		pthread_mutex_unlock(&lockp);
+
+		for(int i=0; i<MULTIPLIER; i++)
+		{
+			infstream.avail_in = (uInt)data->size();
+			infstream.next_in = (Bytef *)data->getStream();
+			infstream.avail_out = (uInt)SIZEBUFF;
+			infstream.next_out = (Bytef *)outbuff;
+
+			inflateInit(&infstream);
+			inflate(&infstream, Z_NO_FLUSH);
+			inflateEnd(&infstream);
+#ifdef PRINT_COMPRESS_SIZE
+			if(i == 0)
+			{
+				pthread_mutex_lock(&lockp);
+				totbytesdecomp += ((unsigned char*) infstream.next_out - outbuff);
+				pthread_mutex_unlock(&lockp);
+			}
+#endif
+		}
+	}
+}
+
 int main(int argc, char *argv[])
 {
 	struct timespec start, stop;
@@ -264,7 +376,7 @@ int main(int argc, char *argv[])
 	string ctarta;
 
 	if(argc <= 2) {
-		std::cerr << "ERROR: Please, provide the .raw and algorithm (waveextract, compresslz4, decompresslz4 or compressZlib)." << std::endl;
+		std::cerr << "ERROR: Please, provide the .raw and algorithm (waveextract, compresslz4, decompresslz4, compressZlib or decompressZlib)." << std::endl;
 		return 0;
 	}
 
@@ -279,10 +391,12 @@ int main(int argc, char *argv[])
 		alg = &decompressLZ4;
 	else if(algorithmStr.compare("compressZlib") == 0)
 		alg = &compressZlib;
+	else if(algorithmStr.compare("decompressZlib") == 0)
+		alg = &decompressZlib;
 	else
 	{
 		std::cerr << "Wrong algorithm: " << argv[2] << std::endl;
-		std::cerr << "Please, provide the .raw and algorithm (waveextract, compresslz4, decompresslz4 or compressZlib)." << std::endl;
+		std::cerr << "Please, provide the .raw and algorithm (waveextract, compresslz4, decompresslz4, compressZlib or decompressZlib)." << std::endl;
 		return 0;
 	}
 	std::cout << "Using algorithm: " << algorithmStr << std::endl;
@@ -305,6 +419,22 @@ int main(int argc, char *argv[])
 	std::cout << "Packet size multiplier: " << MULTIPLIER << std::endl;
 	std::cout << "Compression level: " << COMPRESSION_LEVEL << std::endl;
 
+	string compType = "";
+	// if we are testing decompress we create the buffers for testing
+	if(algorithmStr.compare("decompresslz4") == 0)
+	{
+		sharedBuffer = createLZ4Buffer(&buff);
+		compType = "lz4";
+	}
+	else if(algorithmStr.compare("decompressZlib") == 0)
+	{
+		sharedBuffer = createZlibBuffer(&buff);
+		compType = "zlib";
+	}
+
+	if(compType.compare(""))
+		std::cout << "Loaded " << sharedBuffer.size() << " elements into " << compType << " buffer" << std::endl;
+
 	// launch pthreads and timer
 	clock_gettime(CLOCK_MONOTONIC, &start);
 	pthread_t tid[NTHREADS];
@@ -323,12 +453,21 @@ int main(int argc, char *argv[])
 	float sizeMB = (totbytes * MULTIPLIER / 1000000.0);
 	std::cout << "Result: it took  " << time << " s" << std::endl;
 	std::cout << "Result: rate: " << setprecision(10) << sizeMB / time << " MB/s" << std::endl;
-	std::cout << "Overall buffer size: " << setprecision(10) << sizeMB << std::endl;
+	std::cout << "Input buffer size: " << setprecision(10) << sizeMB << std::endl;
 
 #ifdef PRINT_COMPRESS_SIZE
-	float sizecompMB = (totbytescomp * MULTIPLIER / 1000000.0);
-	std::cout << "Overall compressed buffer size: " << setprecision(10) << sizecompMB << std::endl;
-	std::cout << "Compression factor: " << sizeMB / sizecompMB << std::endl;
+	if(algorithmStr.compare("compresslz4") == 0 || algorithmStr.compare("compressZlib") == 0)
+	{
+		float sizecompMB = (totbytescomp * MULTIPLIER / 1000000.0);
+		std::cout << "Output buffer size: " << setprecision(10) << sizecompMB << std::endl;
+		std::cout << "Compression ratio: " << sizeMB / sizecompMB << std::endl;
+	}
+	else if(algorithmStr.compare("decompresslz4") == 0 || algorithmStr.compare("decompressZlib") == 0)
+	{
+		float sizedecompMB = (totbytesdecomp * MULTIPLIER / 1000000.0);
+		std::cout << "Output buffer size: " << setprecision(10) << sizedecompMB << std::endl;
+		std::cout << "Compression ratio: " << sizedecompMB / sizeMB << std::endl;
+	}
 #endif
 
 	// destroy shared variables
