@@ -163,7 +163,7 @@ void* compressLZ4(void* buffin)
 
 		for(int i=0; i<MULTIPLIER; i++)
 		{
-			ByteStreamPtr datacomp = data->compress(LZ4, 9);
+			ByteStreamPtr datacomp = data->compress(LZ4, COMPRESSION_LEVEL);
 #ifdef PRINT_COMPRESS_SIZE
 			if(i == 0)
 			{
