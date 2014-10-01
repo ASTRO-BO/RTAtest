@@ -20,3 +20,4 @@ test_pthread: test_pthread.cpp mac_clock_gettime.h
 
 clean:
 	@rm -f pwave pwave_minimal pcompress pdecompress threads test_pthread
+	@rm -f CTAHeaderGEN.header rta_fadc_all.stream triggered_telescope1_30GEN.packet triggered_telescope1_40GEN.packet triggered_telescope1_50GEN.packet triggered_telescope_pixel1_30GEN.rblock triggered_telescope_pixel1_40GEN.rblock triggered_telescope_pixel1_50GEN.rblock triggered_telescope_pixelIDGEN.rblock
