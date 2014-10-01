@@ -16,7 +16,7 @@ threads: threads.c
 	$(CC) $(CFLAGS) threads.c -o threads -lrt
 
 test_pthread: test_pthread.cpp mac_clock_gettime.h
-	$(CXX) $(CXXFLAGS) test_pthread.cpp -o test_pthread -lpacket -lrt -pthread
+	$(CXX) $(CXXFLAGS) test_pthread.cpp -o test_pthread -lz -lpacket -lrt -pthread
 
 clean:
 	@rm -f pwave pwave_minimal pcompress pdecompress threads test_pthread

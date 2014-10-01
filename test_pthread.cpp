@@ -3,6 +3,7 @@
 #include <iomanip>
 #include <pthread.h>
 #include "mac_clock_gettime.h"
+#include <zlib.h>
 
 //#define DEBUG 1
 //#define PRINTALG 1
@@ -191,6 +192,51 @@ void* decompressLZ4(void* buffin)
 	}
 }
 
+void* compressZlib(void* buffin)
+{
+	PacketBufferV* buff = (PacketBufferV*) buffin;
+
+	const size_t SIZEBUFF = 400000;
+	unsigned char outbuff[SIZEBUFF];
+
+	z_stream defstream;
+	defstream.zalloc = Z_NULL;
+	defstream.zfree = Z_NULL;
+	defstream.opaque = Z_NULL;
+
+	for(int n=0; n<NTIMES; n++)
+	{
+		pthread_mutex_lock(&lockp);
+		ByteStreamPtr rawPacket = buff->getNext();
+		Packet *p = ps->getPacket(rawPacket);
+#ifdef DEBUG
+		if(p->getPacketID() == 0) {
+			std::cerr << "No packet type recognized" << std::endl;
+			continue;
+		}
+#endif
+		ByteStreamPtr data = p->getData();
+		totbytes += data->size();
+		defstream.avail_in = (uInt)data->size();
+		defstream.next_in = (Bytef *)data->getStream();
+		defstream.avail_out = (uInt) SIZEBUFF;
+		defstream.next_out = (Bytef *)outbuff;
+#ifdef DEBUG
+		std::cout << "data size " << data->size() << std::endl;
+		std::cout << "totbytes " << totbytes << std::endl;
+#endif
+		pthread_mutex_unlock(&lockp);
+
+		for(int i=0; i<MULTIPLIER; i++)
+		{
+			deflateInit(&defstream, Z_DEFAULT_COMPRESSION);
+			deflate(&defstream, Z_FINISH);
+			deflateEnd(&defstream);
+//			printf("Deflated size is: %lu\n", (char*)defstream.next_out - b);
+		}
+	}
+}
+
 int main(int argc, char *argv[])
 {
 	struct timespec start, stop;
@@ -198,7 +244,7 @@ int main(int argc, char *argv[])
 	string ctarta;
 
 	if(argc <= 2) {
-		std::cerr << "ERROR: Please, provide the .raw and algorithm (waveextract, compresslz4 or decompresslz4)." << std::endl;
+		std::cerr << "ERROR: Please, provide the .raw and algorithm (waveextract, compresslz4, decompresslz4 or compressZlib)." << std::endl;
 		return 0;
 	}
 
@@ -211,12 +257,15 @@ int main(int argc, char *argv[])
 		alg = &compressLZ4;
 	else if(algorithmStr.compare("decompresslz4") == 0)
 		alg = &decompressLZ4;
+	else if(algorithmStr.compare("compressZlib") == 0)
+		alg = &compressZlib;
 	else
 	{
 		std::cerr << "Wrong algorithm: " << argv[2] << std::endl;
-		std::cerr << "Please, provide the .raw and algorithm (waveextract, compresslz4 or decompresslz4)." << std::endl;
+		std::cerr << "Please, provide the .raw and algorithm (waveextract, compresslz4, decompresslz4 or compressZlib)." << std::endl;
 		return 0;
 	}
+	std::cout << "Using algorithm: " << algorithmStr << std::endl;
 
 	PacketBufferV buff(configFileName, argv[1]);
 	buff.load();
