@@ -139,6 +139,8 @@ void* extractWave(void* buffin)
 		for(int i=0; i<MULTIPLIER; i++)
 			calcWaveformExtraction(rawdata, npix, nsamp, 6, maxres, timeres);
 	}
+
+	return 0;
 }
 
 void* compressLZ4(void* buffin)
@@ -178,6 +180,8 @@ void* compressLZ4(void* buffin)
 #endif
 		}
 	}
+
+	return 0;
 }
 
 std::vector<ByteStreamPtr> createLZ4Buffer(PacketBufferV* buff)
@@ -204,8 +208,6 @@ std::vector<ByteStreamPtr> createLZ4Buffer(PacketBufferV* buff)
 
 void* decompressLZ4(void* buffin)
 {
-	PacketBufferV* buff = (PacketBufferV*) buffin;
-
 	for(int n=0; n<NTIMES; n++)
 	{
 		pthread_mutex_lock(&lockp);
@@ -231,6 +233,8 @@ void* decompressLZ4(void* buffin)
 #endif
 		}
 	}
+
+	return 0;
 }
 
 std::vector<ByteStreamPtr> createZlibBuffer(PacketBufferV* buff)
@@ -321,12 +325,12 @@ void* compressZlib(void* buffin)
 #endif
 		}
 	}
+
+	return 0;
 }
 
 void* decompressZlib(void* buffin)
 {
-	PacketBufferV* buff = (PacketBufferV*) buffin;
-
 	const size_t SIZEBUFF = 400000;
 	unsigned char outbuff[SIZEBUFF];
 
@@ -367,6 +371,8 @@ void* decompressZlib(void* buffin)
 #endif
 		}
 	}
+
+	return 0;
 }
 
 int main(int argc, char *argv[])

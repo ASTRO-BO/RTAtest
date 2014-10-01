@@ -127,8 +127,8 @@ int main(int argc, char *argv[])
 		if(idx == 0)
 			continue;
 
-		int evtnum = p->getPacketSourceDataField()->getFieldValue_32i("eventNumber");
-		int id = p->getPacketSourceDataField()->getFieldValue("TelescopeID");
+//		int evtnum = p->getPacketSourceDataField()->getFieldValue_32i("eventNumber");
+//		int id = p->getPacketSourceDataField()->getFieldValue("TelescopeID");
 		npixels[idx] = p->getPacketSourceDataField()->getFieldValue("Number of pixels");
 		nsamples[idx] = p->getPacketSourceDataField()->getFieldValue("Number of samples");
 		streams[idx].push_back(p->getData());
@@ -169,7 +169,7 @@ int main(int argc, char *argv[])
 	for(int n=0; n<ntimes; n++)
 	{
 		#pragma omp parallel for
-		for(int npacket=0; npacket < streams[ID].size(); npacket++)
+		for(unsigned int npacket=0; npacket < streams[ID].size(); npacket++)
 		{
 			int npix = npixels[ID];
 			int nsamp = nsamples[ID];

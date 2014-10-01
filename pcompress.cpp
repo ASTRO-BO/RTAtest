@@ -80,7 +80,7 @@ int main(int argc, char *argv[])
 	for(int n=0; n<ntimes; n++)
 	{
 		#pragma omp parallel for
-		for(int npacket=0; npacket < streams[ID].size(); npacket++)
+		for(unsigned int npacket=0; npacket < streams[ID].size(); npacket++)
 		{
 			ByteStreamPtr comp = streams[ID][npacket]->compress(LZ4, 9);
 			totbytescomp[ID] += comp->size();

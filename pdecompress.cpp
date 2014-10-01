@@ -79,7 +79,7 @@ int main(int argc, char *argv[])
 	std::cout << "totbytes " << totbytes[ID] << std::endl;
 #endif
 
-	for(int npacket=0; npacket < streams[ID].size(); npacket++)
+	for(unsigned int npacket=0; npacket < streams[ID].size(); npacket++)
 	{
 		ByteStreamPtr comp = streams[ID][npacket]->compress(LZ4, 9);
 		streamscomp[ID].push_back(comp);
@@ -93,7 +93,7 @@ int main(int argc, char *argv[])
 	{
 		unsigned long sum = 0;
 		#pragma omp for nowait
-		for(int npacket=0; npacket < streams[ID].size(); npacket++)
+		for(unsigned int npacket=0; npacket < streams[ID].size(); npacket++)
 		{
 			ByteStreamPtr decomp = streamscomp[ID][npacket]->decompress(LZ4, 9, 400000);
 			sum += decomp->size();
