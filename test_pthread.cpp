@@ -7,14 +7,13 @@
 #include <zlib.h>
 
 //#define DEBUG 1
-#define PRINT_COMPRESS_SIZE 1
 //#define PRINTALG 1
 
 using namespace PacketLib;
 
 const static int NTHREADS = 4;
-const static int NTIMES = 1000;
-const static int MULTIPLIER = 1;
+const static int NTIMES = 10000;
+const static int PACKET_NUM = 1;
 const static int COMPRESSION_LEVEL = 1;
 
 // shared variables
@@ -25,6 +24,31 @@ unsigned long int totbytescomp = 0;
 unsigned long int totbytesdecomp = 0;
 std::vector<ByteStreamPtr> sharedBuffer;
 int sharedIndex = 0;
+
+std::vector<ByteStreamPtr> createBuffer(PacketBufferV* buff)
+{
+	std::vector<ByteStreamPtr> outBuff;
+
+	for(int i=0; i<buff->size(); i++)
+	{
+		ByteStreamPtr rawPacket = buff->getNext();
+		Packet *p = ps->getPacket(rawPacket);
+#ifdef DEBUG
+		if(p->getPacketID() == 0) {
+			std::cerr << "No packet type recognized" << std::endl;
+			continue;
+		}
+#endif
+		ByteStreamPtr data = p->getData();
+		outBuff.push_back(data);
+	}
+
+	return outBuff;
+}
+
+//---------------------------------------------------------
+// WAVEFORM EXTRACTION
+//---------------------------------------------------------
 
 void calcWaveformExtraction(byte* buffer, int npixels, int nsamples, int ws, unsigned short* maxresext, unsigned short* timeresext) {
 	word *b = (word*) buffer; //should be pedestal subtractred
@@ -92,15 +116,16 @@ void calcWaveformExtraction(byte* buffer, int npixels, int nsamples, int ws, uns
 
 void* extractWave(void* buffin)
 {
-	PacketBufferV* buff = (PacketBufferV*) buffin;
 	unsigned short* maxres = new unsigned short[3000];
 	unsigned short* timeres = new unsigned short[3000];
 	int npix_idx = 0;
 	int nsamp_idx = 0;
+	Packet* p = 0;
 
+	// load packet type (once per thread)
 	pthread_mutex_lock(&lockp);
 	try {
-		Packet* p = ps->getPacketType("triggered_telescope1_30GEN");
+		p = ps->getPacketType("triggered_telescope1_30GEN");
 		npix_idx = p->getPacketSourceDataField()->getFieldIndex("Number of pixels");
 		nsamp_idx = p->getPacketSourceDataField()->getFieldIndex("Number of samples");
 	} catch (PacketException* e)
@@ -108,77 +133,132 @@ void* extractWave(void* buffin)
 		cout << "Error during encoding: ";
 		cout << e->geterror() << endl;
 	}
-
 	pthread_mutex_unlock(&lockp);
 
+	ByteStreamPtr localBuffer[PACKET_NUM];
+	int npix[PACKET_NUM];
+	int nsamp[PACKET_NUM];
 	for(int n=0; n<NTIMES; n++)
 	{
+		// copy PACKET_NUM packets data locally
 		pthread_mutex_lock(&lockp);
-		ByteStreamPtr rawPacket = buff->getNext();
-		Packet *p = ps->getPacket(rawPacket);
+		for(int m=0; m<PACKET_NUM; m++)
+		{
+			ByteStreamPtr data = sharedBuffer[sharedIndex];
+			sharedIndex = (sharedIndex+1) % sharedBuffer.size();
+			totbytes += data->size();
 #ifdef DEBUG
-		if(p->getPacketID() == 0) {
-			std::cerr << "No packet type recognized" << std::endl;
-			continue;
+			std::cout << "data size " << data->size() << std::endl;
+			std::cout << "totbytes " << totbytes << std::endl;
+#endif
+			localBuffer[m] = data;
 		}
-#endif
-		ByteStreamPtr data = p->getData();
-		byte* rawdata = data->getStream();
-		int npix = p->getPacketSourceDataField()->getFieldValue(npix_idx);
-		int nsamp = p->getPacketSourceDataField()->getFieldValue(nsamp_idx);
-		totbytes += data->size();
-
-#ifdef DEBUG
-		std::cout << "npixels " << npix << std::endl;
-		std::cout << "nsamples " << nsamp << std::endl;
-		std::cout << "data size " << data->size() << std::endl;
-		std::cout << "totbytes " << totbytes << std::endl;
-#endif
 		pthread_mutex_unlock(&lockp);
 
-		for(int i=0; i<MULTIPLIER; i++)
-			calcWaveformExtraction(rawdata, npix, nsamp, 6, maxres, timeres);
+		for(int m=0; m<PACKET_NUM; m++)
+		{
+			byte* rawdata = localBuffer[m]->getStream();
+
+			// get npixel and nsamples
+			pthread_mutex_lock(&lockp);
+			npix[m] = p->getPacketSourceDataField()->getFieldValue(npix_idx);
+			nsamp[m] = p->getPacketSourceDataField()->getFieldValue(nsamp_idx);
+			pthread_mutex_unlock(&lockp);
+#ifdef DEBUG
+			std::cout << "npixels " << pix << std::endl;
+			std::cout << "nsamples " << samp << std::endl;
+			std::cout << "data size " << data->size() << std::endl;
+			std::cout << "totbytes " << totbytes << std::endl;
+#endif
+			// extract waveform
+			calcWaveformExtraction(rawdata, npix[m], nsamp[m], 6, maxres, timeres);
+		}
 	}
 
 	return 0;
 }
 
+//---------------------------------------------------------
+// LZ4 compression
+//---------------------------------------------------------
+
 void* compressLZ4(void* buffin)
 {
-	PacketBufferV* buff = (PacketBufferV*) buffin;
-
+	ByteStreamPtr localBuffer[PACKET_NUM];
 	for(int n=0; n<NTIMES; n++)
 	{
+		// copy PACKET_NUM packets data locally
 		pthread_mutex_lock(&lockp);
-		ByteStreamPtr rawPacket = buff->getNext();
-		Packet *p = ps->getPacket(rawPacket);
+		for(int m=0; m<PACKET_NUM; m++)
+		{
+			ByteStreamPtr data = sharedBuffer[sharedIndex];
+			sharedIndex = (sharedIndex+1) % sharedBuffer.size();
+			totbytes += data->size();
 #ifdef DEBUG
-		if(p->getPacketID() == 0) {
-			std::cerr << "No packet type recognized" << std::endl;
-			continue;
+			std::cout << "data size " << data->size() << std::endl;
+			std::cout << "totbytes " << totbytes << std::endl;
+#endif
+			localBuffer[m] = data;
 		}
-#endif
-		ByteStreamPtr data = p->getData();
-		totbytes += data->size();
-
-#ifdef DEBUG
-		std::cout << "data size " << data->size() << std::endl;
-		std::cout << "totbytes " << totbytes << std::endl;
-#endif
 		pthread_mutex_unlock(&lockp);
 
-		for(int i=0; i<MULTIPLIER; i++)
+		int compbytes = 0;
+		for(int m=0; m<PACKET_NUM; m++)
 		{
+			ByteStreamPtr data = localBuffer[m];
+
+			// compress
 			ByteStreamPtr datacomp = data->compress(LZ4, COMPRESSION_LEVEL);
-#ifdef PRINT_COMPRESS_SIZE
-			if(i == 0)
-			{
-				pthread_mutex_lock(&lockp);
-				totbytescomp += datacomp->size();
-				pthread_mutex_unlock(&lockp);
-			}
-#endif
+
+			// update local byte counter
+			compbytes += datacomp->size();
 		}
+
+		// update global byte counter
+		pthread_mutex_lock(&lockp);
+		totbytescomp += compbytes;
+		pthread_mutex_unlock(&lockp);
+	}
+
+	return 0;
+}
+
+void* decompressLZ4(void* buffin)
+{
+	ByteStreamPtr localBuffer[PACKET_NUM];
+	for(int n=0; n<NTIMES; n++)
+	{
+		// copy PACKET_NUM packets data locally
+		pthread_mutex_lock(&lockp);
+		for(int m=0; m<PACKET_NUM; m++)
+		{
+			ByteStreamPtr data = sharedBuffer[sharedIndex];
+			sharedIndex = (sharedIndex+1) % sharedBuffer.size();
+			totbytes += data->size();
+#ifdef DEBUG
+			std::cout << "data size " << data->size() << std::endl;
+			std::cout << "totbytes " << totbytes << std::endl;
+#endif
+			localBuffer[m] = data;
+		}
+		pthread_mutex_unlock(&lockp);
+
+		int decompbytes = 0;
+		for(int m=0; m<PACKET_NUM; m++)
+		{
+			ByteStreamPtr data = localBuffer[m];
+
+			// decompress
+			ByteStreamPtr datadecomp = data->decompress(LZ4, COMPRESSION_LEVEL, 400000);
+
+			// update local byte counter
+			decompbytes += datadecomp->size();
+		}
+
+		// update global byte counter
+		pthread_mutex_lock(&lockp);
+		totbytesdecomp += decompbytes;
+		pthread_mutex_unlock(&lockp);
 	}
 
 	return 0;
@@ -206,32 +286,114 @@ std::vector<ByteStreamPtr> createLZ4Buffer(PacketBufferV* buff)
 	return compbuff;
 }
 
-void* decompressLZ4(void* buffin)
+//---------------------------------------------------------
+// zlib compression
+//---------------------------------------------------------
+
+void* compressZlib(void* buffin)
 {
+	const size_t SIZEBUFF = 400000;
+	unsigned char outbuff[SIZEBUFF];
+
+	z_stream defstream;
+	defstream.zalloc = Z_NULL;
+	defstream.zfree = Z_NULL;
+	defstream.opaque = Z_NULL;
+
+	ByteStreamPtr localBuffer[PACKET_NUM];
 	for(int n=0; n<NTIMES; n++)
 	{
+		// copy PACKET_NUM packets data locally
 		pthread_mutex_lock(&lockp);
-		ByteStreamPtr data = sharedBuffer[sharedIndex];
-		sharedIndex = (sharedIndex+1) % sharedBuffer.size();
-		totbytes += data->size();
+		for(int m=0; m<PACKET_NUM; m++)
+		{
+			ByteStreamPtr data = sharedBuffer[sharedIndex];
+			sharedIndex = (sharedIndex+1) % sharedBuffer.size();
+			totbytes += data->size();
 #ifdef DEBUG
-		std::cout << "data size " << data->size() << std::endl;
-		std::cout << "totbytes " << totbytes << std::endl;
+			std::cout << "data size " << data->size() << std::endl;
+			std::cout << "totbytes " << totbytes << std::endl;
 #endif
+			localBuffer[m] = data;
+		}
 		pthread_mutex_unlock(&lockp);
 
-		for(int i=0; i<MULTIPLIER; i++)
+		int compbytes = 0;
+		for(int m=0; m<PACKET_NUM; m++)
 		{
-			ByteStreamPtr datadecomp = data->decompress(LZ4, COMPRESSION_LEVEL, 400000);
-#ifdef PRINT_COMPRESS_SIZE
-			if(i == 0)
-			{
-				pthread_mutex_lock(&lockp);
-				totbytesdecomp += datadecomp->size();
-				pthread_mutex_unlock(&lockp);
-			}
-#endif
+			ByteStreamPtr data = localBuffer[m];
+
+			// compress
+			defstream.avail_in = (uInt)data->size();
+			defstream.next_in = (Bytef *)data->getStream();
+			defstream.avail_out = (uInt) SIZEBUFF;
+			defstream.next_out = (Bytef *)outbuff;
+			deflateInit(&defstream, COMPRESSION_LEVEL);
+			deflate(&defstream, Z_FINISH);
+			deflateEnd(&defstream);
+
+			// update local byte counter
+			compbytes += ((unsigned char*) defstream.next_out - outbuff);
 		}
+
+		// update global byte counter
+		pthread_mutex_lock(&lockp);
+		totbytescomp += compbytes;
+		pthread_mutex_unlock(&lockp);
+	}
+
+	return 0;
+}
+
+void* decompressZlib(void* buffin)
+{
+	const size_t SIZEBUFF = 400000;
+	unsigned char outbuff[SIZEBUFF];
+
+	z_stream infstream;
+	infstream.zalloc = Z_NULL;
+	infstream.zfree = Z_NULL;
+	infstream.opaque = Z_NULL;
+
+	ByteStreamPtr localBuffer[PACKET_NUM];
+	for(int n=0; n<NTIMES; n++)
+	{
+		// copy PACKET_NUM packets data locally
+		pthread_mutex_lock(&lockp);
+		for(int m=0; m<PACKET_NUM; m++)
+		{
+			ByteStreamPtr data = sharedBuffer[sharedIndex];
+			sharedIndex = (sharedIndex+1) % sharedBuffer.size();
+			totbytes += data->size();
+#ifdef DEBUG
+			std::cout << "data size " << data->size() << std::endl;
+			std::cout << "totbytes " << totbytes << std::endl;
+#endif
+			localBuffer[m] = data;
+		}
+		pthread_mutex_unlock(&lockp);
+
+		int decompbytes = 0;
+		for(int m=0; m<PACKET_NUM; m++)
+		{
+			ByteStreamPtr data = localBuffer[m];
+			infstream.avail_in = (uInt)data->size();
+			infstream.next_in = (Bytef *)data->getStream();
+			infstream.avail_out = (uInt)SIZEBUFF;
+			infstream.next_out = (Bytef *)outbuff;
+
+			// decompress
+			inflateInit(&infstream);
+			inflate(&infstream, Z_NO_FLUSH);
+			inflateEnd(&infstream);
+
+			decompbytes += ((unsigned char*) infstream.next_out - outbuff);
+		}
+
+		// update decompressed byte counter
+		pthread_mutex_lock(&lockp);
+		totbytesdecomp += decompbytes;
+		pthread_mutex_unlock(&lockp);
 	}
 
 	return 0;
@@ -273,106 +435,6 @@ std::vector<ByteStreamPtr> createZlibBuffer(PacketBufferV* buff)
 	}
 
 	return compbuff;
-}
-
-void* compressZlib(void* buffin)
-{
-	PacketBufferV* buff = (PacketBufferV*) buffin;
-
-	const size_t SIZEBUFF = 400000;
-	unsigned char outbuff[SIZEBUFF];
-
-	z_stream defstream;
-	defstream.zalloc = Z_NULL;
-	defstream.zfree = Z_NULL;
-	defstream.opaque = Z_NULL;
-
-	for(int n=0; n<NTIMES; n++)
-	{
-		pthread_mutex_lock(&lockp);
-		ByteStreamPtr rawPacket = buff->getNext();
-		Packet *p = ps->getPacket(rawPacket);
-#ifdef DEBUG
-		if(p->getPacketID() == 0) {
-			std::cerr << "No packet type recognized" << std::endl;
-			continue;
-		}
-#endif
-		ByteStreamPtr data = p->getData();
-		totbytes += data->size();
-#ifdef DEBUG
-		std::cout << "data size " << data->size() << std::endl;
-		std::cout << "totbytes " << totbytes << std::endl;
-#endif
-		pthread_mutex_unlock(&lockp);
-
-		for(int i=0; i<MULTIPLIER; i++)
-		{
-			defstream.avail_in = (uInt)data->size();
-			defstream.next_in = (Bytef *)data->getStream();
-			defstream.avail_out = (uInt) SIZEBUFF;
-			defstream.next_out = (Bytef *)outbuff;
-			deflateInit(&defstream, COMPRESSION_LEVEL);
-			deflate(&defstream, Z_FINISH);
-			deflateEnd(&defstream);
-#ifdef PRINT_COMPRESS_SIZE
-			if(i == 0)
-			{
-				pthread_mutex_lock(&lockp);
-				totbytescomp += ((unsigned char*) defstream.next_out - outbuff);
-				pthread_mutex_unlock(&lockp);
-			}
-#endif
-		}
-	}
-
-	return 0;
-}
-
-void* decompressZlib(void* buffin)
-{
-	const size_t SIZEBUFF = 400000;
-	unsigned char outbuff[SIZEBUFF];
-
-	z_stream infstream;
-	infstream.zalloc = Z_NULL;
-	infstream.zfree = Z_NULL;
-	infstream.opaque = Z_NULL;
-
-	for(int n=0; n<NTIMES; n++)
-	{
-		pthread_mutex_lock(&lockp);
-		ByteStreamPtr data = sharedBuffer[sharedIndex];
-		sharedIndex = (sharedIndex+1) % sharedBuffer.size();
-		totbytes += data->size();
-#ifdef DEBUG
-		std::cout << "data size " << data->size() << std::endl;
-		std::cout << "totbytes " << totbytes << std::endl;
-#endif
-		pthread_mutex_unlock(&lockp);
-
-		for(int i=0; i<MULTIPLIER; i++)
-		{
-			infstream.avail_in = (uInt)data->size();
-			infstream.next_in = (Bytef *)data->getStream();
-			infstream.avail_out = (uInt)SIZEBUFF;
-			infstream.next_out = (Bytef *)outbuff;
-
-			inflateInit(&infstream);
-			inflate(&infstream, Z_NO_FLUSH);
-			inflateEnd(&infstream);
-#ifdef PRINT_COMPRESS_SIZE
-			if(i == 0)
-			{
-				pthread_mutex_lock(&lockp);
-				totbytesdecomp += ((unsigned char*) infstream.next_out - outbuff);
-				pthread_mutex_unlock(&lockp);
-			}
-#endif
-		}
-	}
-
-	return 0;
 }
 
 int main(int argc, char *argv[])
@@ -422,7 +484,7 @@ int main(int argc, char *argv[])
 
 	std::cout << "Number of threads: " << NTHREADS << std::endl;
 	std::cout << "Number of packet per threads: " << NTIMES << std::endl;
-	std::cout << "Packet size multiplier: " << MULTIPLIER << std::endl;
+	std::cout << "Packet number multiplier: " << PACKET_NUM << std::endl;
 	std::cout << "Compression level: " << COMPRESSION_LEVEL << std::endl;
 
 	string compType = "";
@@ -436,6 +498,10 @@ int main(int argc, char *argv[])
 	{
 		sharedBuffer = createZlibBuffer(&buff);
 		compType = "zlib";
+	}
+	else // otherwise a normal buffer
+	{
+		sharedBuffer = createBuffer(&buff);
 	}
 
 	if(compType.compare(""))
@@ -456,25 +522,23 @@ int main(int argc, char *argv[])
 
 	// get results
 	double time = timediff(start, stop);
-	float sizeMB = (totbytes * MULTIPLIER / 1000000.0);
+	float sizeMB = (totbytes / 1000000.0);
 	std::cout << "Result: it took  " << time << " s" << std::endl;
 	std::cout << "Result: rate: " << setprecision(10) << sizeMB / time << " MB/s" << std::endl;
 	std::cout << "Input buffer size: " << setprecision(10) << sizeMB << std::endl;
 
-#ifdef PRINT_COMPRESS_SIZE
 	if(algorithmStr.compare("compresslz4") == 0 || algorithmStr.compare("compressZlib") == 0)
 	{
-		float sizecompMB = (totbytescomp * MULTIPLIER / 1000000.0);
+		float sizecompMB = (totbytescomp / 1000000.0);
 		std::cout << "Output buffer size: " << setprecision(10) << sizecompMB << std::endl;
 		std::cout << "Compression ratio: " << sizeMB / sizecompMB << std::endl;
 	}
 	else if(algorithmStr.compare("decompresslz4") == 0 || algorithmStr.compare("decompressZlib") == 0)
 	{
-		float sizedecompMB = (totbytesdecomp * MULTIPLIER / 1000000.0);
+		float sizedecompMB = (totbytesdecomp / 1000000.0);
 		std::cout << "Output buffer size: " << setprecision(10) << sizedecompMB << std::endl;
 		std::cout << "Compression ratio: " << sizedecompMB / sizeMB << std::endl;
 	}
-#endif
 
 	// destroy shared variables
 	delete ps;
