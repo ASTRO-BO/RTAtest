@@ -1,3 +1,20 @@
+/***************************************************************************
+						CTA/RTA performance tests
+ -------------------
+ begin                : September 2014
+ copyright            : (C) 2014 by Andrea Zoli, Andrea Bulgarelli
+ email                : zoli@iasfbo.inaf.it, bulgarelli@iasfbo.inaf.it
+ ***************************************************************************/
+
+/***************************************************************************
+ *                                                                         *
+ *   This program is free software; you can redistribute it and/or modify  *
+ *   it under the terms of the GNU General Public License as published by  *
+ *   the Free Software Foundation; either version 2 of the License, or     *
+ *   (at your option) any later version.                                   *
+ *                                                                         *
+ ***************************************************************************/
+
 #include <packet/PacketBufferV.h>
 #include <packet/PacketLibDefinition.h>
 #include <iomanip>
@@ -69,6 +86,14 @@ std::vector<DataBufferElement> createBuffer(PacketBufferV* buff)
 
 		DataBufferElement elem;
 		elem.data = p->getData();
+
+#ifdef ARCH_BIGENDIAN
+		if(!elem.data->isBigendian())
+			elem.data->swapWord();
+#else
+		if(elem.data->isBigendian())
+			elem.data->swapWord();
+#endif
 		elem.npix = npix;
 		elem.nsamp = nsamp;
 		outBuff.push_back(elem);
@@ -242,6 +267,13 @@ void* extractWavePacket(void* buffin)
 			int npix = p->getPacketSourceDataField()->getFieldValue(npix_idx);
 			int nsamp = p->getPacketSourceDataField()->getFieldValue(nsamp_idx);
 			ByteStreamPtr data = p->getData();
+#ifdef ARCH_BIGENDIAN
+			if(!data->isBigendian())
+				data->swapWord();
+#else
+			if(data->isBigendian())
+				data->swapWord();
+#endif
 			totbytes += data->size();
 			byte* rawdata = data->getStream();
 #ifdef DEBUG
@@ -523,7 +555,7 @@ int main(int argc, char *argv[])
 	configFileName = "rta_fadc_all.xml";
 
 	if(argc <= 2) {
-		std::cerr << "ERROR: Please, provide the .raw and algorithm (waveextract, compresslz4, decompresslz4, compressZlib or decompressZlib)." << std::endl;
+		std::cerr << "ERROR: Please, provide the .raw and algorithm (waveextractdata, waveextractpacket, compresslz4, decompresslz4, compressZlib or decompressZlib)." << std::endl;
 		return 0;
 	}
 

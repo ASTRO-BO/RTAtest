@@ -1,4 +1,4 @@
-<stream name="rta_fadc_all" xmlns="http://iasfbo.inaf.it/telemetry">
+<stream name="rta_fadc_all" xmlns="http://iasfbo.inaf.it/telemetry" bigendian="false" >
   <header name="CTAHeaderGEN" description="Header CTA" idref="packetlength">
     <field name="Version number" type="uint3" constvalue="4" />
     <field name="Type" type="uint1" constvalue="0" />
@@ -10,6 +10,8 @@
     <field name="CRC flag" type="uint2" constvalue="3" />
     <field name="Packet Type" type="uint6" id="id1" />
     <field name="Packet Subtype" type="uint8" id="id2" />
+    <field name="CompressionAlgorithm" type="uint8" id="packetlib:compression_algorithm" />
+    <field name="CompressionLevel" type="uint8" id="packetlib:compression_level" />
   </header>
   <packet name="triggered_telescope1_30GEN" description="CTA Triggered Sim Telescope 30 samples">
     <datafieldheader>
