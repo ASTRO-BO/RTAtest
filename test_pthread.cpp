@@ -69,6 +69,14 @@ std::vector<DataBufferElement> createBuffer(PacketBufferV* buff)
 
 		DataBufferElement elem;
 		elem.data = p->getData();
+
+#ifdef ARCH_BIGENDIAN
+		if(!elem.data->isBigendian())
+			elem.data->swapWord();
+#else
+		if(elem.data->isBigendian())
+			elem.data->swapWord();
+#endif
 		elem.npix = npix;
 		elem.nsamp = nsamp;
 		outBuff.push_back(elem);
