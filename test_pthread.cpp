@@ -28,10 +28,10 @@
 
 using namespace PacketLib;
 
-const static int NTHREADS = 4;
-const static long NTIMES = 10000;
+static int NTHREADS = 8;
+static long NTIMES = 10000;
 const static long PACKET_NUM = 1;
-const static int COMPRESSION_LEVEL = 1;
+static int COMPRESSION_LEVEL = 1;
 
 // shared variables
 string configFileName;
@@ -552,16 +552,20 @@ std::vector<ByteStreamPtr> createZlibBuffer(PacketBufferV* buff)
 int main(int argc, char *argv[])
 {
 	struct timespec start, stop;
-	configFileName = "rta_fadc_all.xml";
+	
 
-	if(argc <= 2) {
-		std::cerr << "ERROR: Please, provide the .raw and algorithm (waveextractdata, waveextractpacket, compresslz4, decompresslz4, compressZlib or decompressZlib)." << std::endl;
+	if(argc <= 4) {
+		std::cerr << "ERROR: Please, provide the .raw, .stream, number of threads, algorithm (waveextractdata, waveextractpacket, compresslz4, decompresslz4, compressZlib or decompressZlib) [optional: Number of packet per threads,  Compression level]." << std::endl;
+		std::cerr << "Example ./test_pthread $CTARTA/data/Aar.ABTEST.FADC.BIGTRUE.raw rta_fadc_all_BIGTRUE.stream 8 waveextractdata [10000 1]" << std::endl;
 		return 0;
 	}
+	
+	configFileName = argv[2];
+	NTHREADS = atoi(argv[3]);
 
 	// parse input algorithm
 	void* (*alg)(void*);
-	std::string algorithmStr(argv[2]);
+	std::string algorithmStr(argv[4]);
 	if(algorithmStr.compare("waveextractdata") == 0)
 		alg = &extractWaveData;
 	else if(algorithmStr.compare("waveextractpacket") == 0)
@@ -577,10 +581,16 @@ int main(int argc, char *argv[])
 	else
 	{
 		std::cerr << "Wrong algorithm: " << argv[2] << std::endl;
-		std::cerr << "Please, provide the .raw and algorithm (waveextractdata, compresslz4, decompresslz4, compressZlib or decompressZlib)." << std::endl;
+		std::cerr << "Please, provide the .raw and algorithm (waveextractdata, waveextractpacket, compresslz4, decompresslz4, compressZlib or decompressZlib)." << std::endl;
 		return 0;
 	}
 	std::cout << "Using algorithm: " << algorithmStr << std::endl;
+	
+	if(argc >= 6) {
+		NTIMES = atoi(argv[5]);
+		COMPRESSION_LEVEL = atoi(argv[6]);
+	
+	}
 
 	PacketBufferV buff(configFileName, argv[1]);
 	buff.load();

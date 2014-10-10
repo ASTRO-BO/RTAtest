@@ -1,4 +1,4 @@
-<stream name="rta_fadc_all" xmlns="http://iasfbo.inaf.it/telemetry" bigendian="false" >
+<stream name="rta_fadc_all" xmlns="http://iasfbo.inaf.it/telemetry" bigendian="true" >
   <header name="CTAHeaderGEN" description="Header CTA" idref="packetlength">
     <field name="Version number" type="uint3" constvalue="4" />
     <field name="Type" type="uint1" constvalue="0" />

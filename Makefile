@@ -1,4 +1,4 @@
-all: pwave_minimal pcompress pdecompress threads test_pthread
+all: test_pthread
 
 pwave: pwave.cpp mac_clock_gettime.h
 	$(CXX) $(CXXFLAGS) -fopenmp pwave.cpp -o pwave -lRTAtelem -lpacket -lrt
@@ -16,8 +16,8 @@ threads: threads.c
 	$(CC) $(CFLAGS) threads.c -o threads -lrt
 
 test_pthread: test_pthread.cpp mac_clock_gettime.h
-	$(CXX) $(CXXFLAGS) test_pthread.cpp -o test_pthread -lz -lpacket -lrt -pthread
+	$(CXX) $(CXXFLAGS) test_pthread.cpp -I$(CTARTA)/include -o test_pthread -L$(CTARTA)/lib -lz -lpacket -pthread
 
 clean:
 	@rm -f pwave pwave_minimal pcompress pdecompress threads test_pthread
-	@rm -f CTAHeaderGEN.header rta_fadc_all.stream triggered_telescope1_30GEN.packet triggered_telescope1_40GEN.packet triggered_telescope1_50GEN.packet triggered_telescope_pixel1_30GEN.rblock triggered_telescope_pixel1_40GEN.rblock triggered_telescope_pixel1_50GEN.rblock triggered_telescope_pixelIDGEN.rblock
+#	@rm -f CTAHeaderGEN.header rta_fadc_all.stream triggered_telescope1_30GEN.packet triggered_telescope1_40GEN.packet triggered_telescope1_50GEN.packet triggered_telescope_pixel1_30GEN.rblock triggered_telescope_pixel1_40GEN.rblock triggered_telescope_pixel1_50GEN.rblock triggered_telescope_pixelIDGEN.rblock
