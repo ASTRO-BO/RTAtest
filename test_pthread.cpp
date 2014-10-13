@@ -37,9 +37,10 @@ static int COMPRESSION_LEVEL = 1;
 string configFileName;
 pthread_mutex_t lockp;
 PacketStream* ps;
-unsigned long int totbytes = 0;
+//unsigned long int totbytes = 0;
 unsigned long int totbytescomp = 0;
 unsigned long int totbytesdecomp = 0;
+float sizeMB = 0.0;
 
 typedef struct dataBufferElementStr {
 	ByteStreamPtr data;
@@ -194,10 +195,10 @@ void* extractWaveData(void* buffin)
 			nsamp[m] = sharedDataAndInfoBuffer[sharedIndex].nsamp;
 			
 			sharedIndex = (sharedIndex+1) % sharedDataAndInfoBuffer.size();
-			totbytes += data->size();
+			sizeMB += (data->size() / 1000000.0);
 #ifdef DEBUG
 			std::cout << "data size " << data->size() << std::endl;
-			std::cout << "totbytes " << totbytes << std::endl;
+			std::cout << "tot size (MB) " << sizeMB << std::endl;
 #endif
 			
 		}
@@ -206,15 +207,18 @@ void* extractWaveData(void* buffin)
 		for(int m=0; m<PACKET_NUM; m++)
 		{
 			byte* rawdata = localBuffer[m]->getStream();
+			rawdata[0] = rand() % 100 + 50;
 
 #ifdef DEBUG
 			std::cout << "npixels " << npix[m] << std::endl;
 			std::cout << "nsamples " << nsamp[m] << std::endl;
 			std::cout << "data size " << localBuffer[m]->size() << std::endl;
-			std::cout << "totbytes " << totbytes << std::endl;
+			std::cout << "tot size (MB) " << sizeMB << std::endl;
 #endif
 			// extract waveform
 			calcWaveformExtraction(rawdata, npix[m], nsamp[m], 6, maxres, timeres);
+			maxres[0]++;
+			timeres[0]++;
 		}
 	}
 
@@ -274,21 +278,149 @@ void* extractWavePacket(void* buffin)
 			if(data->isBigendian())
 				data->swapWord();
 #endif
-			totbytes += data->size();
+			sizeMB += (data->size() / 1000000.0);
 			byte* rawdata = data->getStream();
+			rawdata[0] = rand() % 100 + 50;
 #ifdef DEBUG
 			std::cout << "npixels " << npix << std::endl;
 			std::cout << "nsamples " << nsamp << std::endl;
 			std::cout << "data size " << data->size() << std::endl;
-			std::cout << "totbytes " << totbytes << std::endl;
+			std::cout << "tot size (MB) " << sizeMB << std::endl;
 #endif
 			// extract waveform
 			calcWaveformExtraction(rawdata, npix, nsamp, 6, maxres, timeres);
+			maxres[0]++;
+			timeres[0]++;
 		}
 	}
 	delete ps;
 	return 0;
 }
+
+void* routingPacket(void* buffin)
+{
+	PacketBufferV* buff = (PacketBufferV*) buffin;
+	int npix_idx = 0;
+	int nsamp_idx = 0;
+	// load packet type (once per thread)
+	PacketStream* ps;
+	pthread_mutex_lock(&lockp);
+	try {
+		ps = new PacketStream(configFileName.c_str());
+	} catch (PacketException* e)
+	{
+		cout << "Error during routingPacket: ";
+		cout << e->geterror() << endl;
+	}
+	pthread_mutex_unlock(&lockp);
+	
+	ByteStreamPtr localBuffer[PACKET_NUM];
+	int npix[PACKET_NUM];
+	int nsamp[PACKET_NUM];
+	for(int n=0; n<NTIMES; n++)
+	{
+		// copy PACKET_NUM packets data locally
+		pthread_mutex_lock(&lockp);
+		for(int m=0; m<PACKET_NUM; m++)
+		{
+			ByteStreamPtr rawPacket = buff->getNext();
+			localBuffer[m] = rawPacket;
+			
+		}
+		pthread_mutex_unlock(&lockp);
+		
+		for(int m=0; m<PACKET_NUM; m++)
+		{
+			ByteStreamPtr rawPacket = localBuffer[m];
+			Packet *p = ps->getPacket(rawPacket);
+			// get npixel and nsamples
+			if(p->getPacketID() > 0) {
+				sizeMB += (p->size() / 1000000.0);
+				//do something with the packet
+				;
+			}
+#ifdef DEBUG
+			else {
+				cout << "Warning: no packet recognized" << endl;
+			}
+#endif
+			
+#ifdef DEBUG
+			std::cout << "tot size (MB) " << sizeMB << std::endl;
+#endif
+		}
+	}
+	delete ps;
+	return 0;
+}
+
+void* decodePacket(void* buffin)
+{
+	PacketBufferV* buff = (PacketBufferV*) buffin;
+	int npix_idx = 0;
+	int nsamp_idx = 0;
+	// load packet type (once per thread)
+	PacketStream* ps;
+	pthread_mutex_lock(&lockp);
+	try {
+		ps = new PacketStream(configFileName.c_str());
+		Packet *p = ps->getPacketType("triggered_telescope1_30GEN");
+		npix_idx = p->getPacketSourceDataField()->getFieldIndex("Number of pixels");
+		nsamp_idx = p->getPacketSourceDataField()->getFieldIndex("Number of samples");
+	} catch (PacketException* e)
+	{
+		cout << "Error during extractWavePacket: ";
+		cout << e->geterror() << endl;
+	}
+	pthread_mutex_unlock(&lockp);
+	
+	ByteStreamPtr localBuffer[PACKET_NUM];
+	int npix[PACKET_NUM];
+	int nsamp[PACKET_NUM];
+	for(int n=0; n<NTIMES; n++)
+	{
+		// copy PACKET_NUM packets data locally
+		pthread_mutex_lock(&lockp);
+		for(int m=0; m<PACKET_NUM; m++)
+		{
+			ByteStreamPtr rawPacket = buff->getNext();
+			localBuffer[m] = rawPacket;
+			
+		}
+		pthread_mutex_unlock(&lockp);
+		
+		for(int m=0; m<PACKET_NUM; m++)
+		{
+			ByteStreamPtr rawPacket = localBuffer[m];
+			Packet *p = ps->getPacket(rawPacket);
+			// get npixel and nsamples
+			
+			int npix = p->getPacketSourceDataField()->getFieldValue(npix_idx);
+			int nsamp = p->getPacketSourceDataField()->getFieldValue(nsamp_idx);
+			ByteStreamPtr data = p->getData();
+#ifdef ARCH_BIGENDIAN
+			if(!data->isBigendian())
+				data->swapWord();
+#else
+			if(data->isBigendian())
+				data->swapWord();
+#endif
+			sizeMB += (data->size() / 1000000.0);
+			byte* rawdata = data->getStream();
+			rawdata[0] = rand() % 100 + 50;
+#ifdef DEBUG
+			std::cout << "npixels " << npix << std::endl;
+			std::cout << "nsamples " << nsamp << std::endl;
+			std::cout << "data size " << data->size() << std::endl;
+			std::cout << "tot size (MB) " << sizeMB << std::endl;
+#endif
+		}
+	}
+	delete ps;
+	return 0;
+}
+
+
 
 //---------------------------------------------------------
 // LZ4 compression
@@ -305,10 +437,10 @@ void* compressLZ4(void* buffin)
 		{
 			ByteStreamPtr data = sharedDataAndInfoBuffer[sharedIndex].data;
 			sharedIndex = (sharedIndex+1) % sharedDataAndInfoBuffer.size();
-			totbytes += data->size();
+			sizeMB += (data->size() / 1000000.0);
 #ifdef DEBUG
 			std::cout << "data size " << data->size() << std::endl;
-			std::cout << "totbytes " << totbytes << std::endl;
+			std::cout << "toto size (MB) " << sizeMB << std::endl;
 #endif
 			localBuffer[m] = data;
 		}
@@ -346,10 +478,10 @@ void* decompressLZ4(void* buffin)
 		{
 			ByteStreamPtr data = sharedDataBuffer[sharedIndex];
 			sharedIndex = (sharedIndex+1) % sharedDataBuffer.size();
-			totbytes += data->size();
+			sizeMB += (data->size() / 1000000.0);
 #ifdef DEBUG
 			std::cout << "data size " << data->size() << std::endl;
-			std::cout << "totbytes " << totbytes << std::endl;
+			std::cout << "tot size (MB) " << sizeMB << std::endl;
 #endif
 			localBuffer[m] = data;
 		}
@@ -421,10 +553,10 @@ void* compressZlib(void* buffin)
 		{
 			ByteStreamPtr data = sharedDataAndInfoBuffer[sharedIndex].data;
 			sharedIndex = (sharedIndex+1) % sharedDataAndInfoBuffer.size();
-			totbytes += data->size();
+			sizeMB += (data->size() / 1000000.0);
 #ifdef DEBUG
 			std::cout << "data size " << data->size() << std::endl;
-			std::cout << "totbytes " << totbytes << std::endl;
+			std::cout << "tot size (MB) " << sizeMB << std::endl;
 #endif
 			localBuffer[m] = data;
 		}
@@ -476,10 +608,10 @@ void* decompressZlib(void* buffin)
 		{
 			ByteStreamPtr data = sharedDataBuffer[sharedIndex];
 			sharedIndex = (sharedIndex+1) % sharedDataBuffer.size();
-			totbytes += data->size();
+			sizeMB += (data->size() / 1000000.0);
 #ifdef DEBUG
 			std::cout << "data size " << data->size() << std::endl;
-			std::cout << "totbytes " << totbytes << std::endl;
+			std::cout << "tot size MB " << sizeMB << std::endl;
 #endif
 			localBuffer[m] = data;
 		}
@@ -555,7 +687,7 @@ int main(int argc, char *argv[])
 	
 
 	if(argc <= 4) {
-		std::cerr << "ERROR: Please, provide the .raw, .stream, number of threads, algorithm (waveextractdata, waveextractpacket, compresslz4, decompresslz4, compressZlib or decompressZlib) [optional: Number of packet per threads,  Compression level]." << std::endl;
+		std::cerr << "ERROR: Please, provide the .raw, .stream, number of threads, algorithm (waveextractdata, waveextractpacket, decodepacket, routingpacket, compresslz4, decompresslz4, compressZlib or decompressZlib) [optional: Number of packet per threads,  Compression level]." << std::endl;
 		std::cerr << "Example ./test_pthread $CTARTA/data/Aar.ABTEST.FADC.BIGTRUE.raw rta_fadc_all_BIGTRUE.stream 8 waveextractdata [10000 1]" << std::endl;
 		return 0;
 	}
@@ -570,6 +702,10 @@ int main(int argc, char *argv[])
 		alg = &extractWaveData;
 	else if(algorithmStr.compare("waveextractpacket") == 0)
 		alg = &extractWavePacket;
+	else if(algorithmStr.compare("routingpacket") == 0)
+		alg = &routingPacket;
+	else if(algorithmStr.compare("decodepacket") == 0)
+		alg = &decodePacket;
 	else if(algorithmStr.compare("compresslz4") == 0)
 		alg = &compressLZ4;
 	else if(algorithmStr.compare("decompresslz4") == 0)
@@ -581,7 +717,7 @@ int main(int argc, char *argv[])
 	else
 	{
 		std::cerr << "Wrong algorithm: " << argv[2] << std::endl;
-		std::cerr << "Please, provide the .raw and algorithm (waveextractdata, waveextractpacket, compresslz4, decompresslz4, compressZlib or decompressZlib)." << std::endl;
+		std::cerr << "Please, provide the .raw and algorithm (waveextractdata, waveextractpacket, decodepacket, routingpacket, compresslz4, decompresslz4, compressZlib or decompressZlib)." << std::endl;
 		return 0;
 	}
 	std::cout << "Using algorithm: " << algorithmStr << std::endl;
@@ -622,7 +758,7 @@ int main(int argc, char *argv[])
 		sharedDataBuffer = createZlibBuffer(&buff);
 		compType = "zlib";
 	}
-	else if(algorithmStr.compare("waveextractpacket") == 0)
+	else if(algorithmStr.compare("waveextractpacket") == 0 || algorithmStr.compare("routingpacket") == 0 || algorithmStr.compare("decodepacket") == 0)
 	{
 		;
 	}
@@ -649,7 +785,7 @@ int main(int argc, char *argv[])
 
 	// get results
 	double time = timediff(start, stop);
-	float sizeMB = (totbytes / 1000000.0);
+	
 	std::cout << "Result: it took  " << time << " s" << std::endl;
 	std::cout << "Result: rate: " << setprecision(10) << sizeMB / time << " MB/s" << std::endl;
 	std::cout << "Input buffer size: " << setprecision(10) << sizeMB << std::endl;
