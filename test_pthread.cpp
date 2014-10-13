@@ -456,6 +456,8 @@ void* compressLZ4(void* buffin)
 
 			// update local byte counter
 			compbytes += datacomp->size();
+			
+			delete datacomp->getStream(); //HACK
 		}
 
 		// update global byte counter
@@ -494,9 +496,13 @@ void* decompressLZ4(void* buffin)
 
 			// decompress
 			ByteStreamPtr datadecomp = data->decompress(LZ4, COMPRESSION_LEVEL, 400000);
+			
 
 			// update local byte counter
 			decompbytes += datadecomp->size();
+			
+			
+			
 		}
 
 		// update global byte counter
@@ -537,7 +543,7 @@ std::vector<ByteStreamPtr> createLZ4Buffer(PacketBufferV* buff)
 void* compressZlib(void* buffin)
 {
 	const size_t SIZEBUFF = 400000;
-	unsigned char outbuff[SIZEBUFF];
+	
 
 	z_stream defstream;
 	defstream.zalloc = Z_NULL;
@@ -565,6 +571,7 @@ void* compressZlib(void* buffin)
 		int compbytes = 0;
 		for(int m=0; m<PACKET_NUM; m++)
 		{
+			unsigned char outbuff[SIZEBUFF];
 			ByteStreamPtr data = localBuffer[m];
 
 			// compress
@@ -592,7 +599,7 @@ void* compressZlib(void* buffin)
 void* decompressZlib(void* buffin)
 {
 	const size_t SIZEBUFF = 400000;
-	unsigned char outbuff[SIZEBUFF];
+	
 
 	z_stream infstream;
 	infstream.zalloc = Z_NULL;
@@ -620,6 +627,7 @@ void* decompressZlib(void* buffin)
 		int decompbytes = 0;
 		for(int m=0; m<PACKET_NUM; m++)
 		{
+			unsigned char outbuff[SIZEBUFF];
 			ByteStreamPtr data = localBuffer[m];
 			infstream.avail_in = (uInt)data->size();
 			infstream.next_in = (Bytef *)data->getStream();
