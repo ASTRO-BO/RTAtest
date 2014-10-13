@@ -38,9 +38,9 @@ string configFileName;
 pthread_mutex_t lockp;
 PacketStream* ps;
 //unsigned long int totbytes = 0;
-unsigned long int totbytescomp = 0;
-unsigned long int totbytesdecomp = 0;
-float sizeMB = 0.0;
+unsigned long long totbytescomp = 0;
+unsigned long long totbytesdecomp = 0;
+double sizeMB = 0.0;
 
 typedef struct dataBufferElementStr {
 	ByteStreamPtr data;
@@ -257,6 +257,7 @@ void* extractWavePacket(void* buffin)
 		for(int m=0; m<PACKET_NUM; m++)
 		{
 			ByteStreamPtr rawPacket = buff->getNext();
+			sizeMB += (rawPacket->size() / 1000000.0);
 			localBuffer[m] = rawPacket;
 			
 		}
@@ -278,7 +279,6 @@ void* extractWavePacket(void* buffin)
 			if(data->isBigendian())
 				data->swapWord();
 #endif
-			sizeMB += (data->size() / 1000000.0);
 			byte* rawdata = data->getStream();
 			rawdata[0] = rand() % 100 + 50;
 #ifdef DEBUG
@@ -691,6 +691,8 @@ std::vector<ByteStreamPtr> createZlibBuffer(PacketBufferV* buff)
 
 int main(int argc, char *argv[])
 {
+	cout << "Size of short: " << sizeof(short) << " - Size of int: " << sizeof(int) << " - Size of long: " <<  sizeof(long) << " - Size of long long: " << sizeof(long long) << endl;
+	
 	struct timespec start, stop;
 	
 
@@ -794,21 +796,23 @@ int main(int argc, char *argv[])
 	// get results
 	double time = timediff(start, stop);
 	
+	std::cout << "Results -----" << endl;
 	std::cout << "Result: it took  " << time << " s" << std::endl;
 	std::cout << "Result: rate: " << setprecision(10) << sizeMB / time << " MB/s" << std::endl;
-	std::cout << "Input buffer size: " << setprecision(10) << sizeMB << std::endl;
+	std::cout << "Result: rate: " << setprecision(10) << NTHREADS * PACKET_NUM * NTIMES / time << " Hz" << std::endl;
+	std::cout << "Input buffer size: " << setprecision(10) << sizeMB << " MB " << std::endl;
 
 	if(algorithmStr.compare("compresslz4") == 0 || algorithmStr.compare("compressZlib") == 0)
 	{
 		float sizecompMB = (totbytescomp / 1000000.0);
-		std::cout << "Output buffer size: " << setprecision(10) << sizecompMB << std::endl;
-		std::cout << "Compression ratio: " << sizeMB / sizecompMB << std::endl;
+		std::cout << "Output buffer size: " << setprecision(10) << sizecompMB << " MB " << std::endl;
+		std::cout << "Compression ratio: " << 1.0 / (sizeMB / sizecompMB) << std::endl;
 	}
 	else if(algorithmStr.compare("decompresslz4") == 0 || algorithmStr.compare("decompressZlib") == 0)
 	{
 		float sizedecompMB = (totbytesdecomp / 1000000.0);
-		std::cout << "Output buffer size: " << setprecision(10) << sizedecompMB << std::endl;
-		std::cout << "Compression ratio: " << sizedecompMB / sizeMB << std::endl;
+		std::cout << "Output buffer size: " << setprecision(10) << sizedecompMB << " MB " <<  std::endl;
+		std::cout << "Compression ratio: " << 1.0 / (sizedecompMB / sizeMB) << std::endl;
 	}
 
 	// destroy shared variables
