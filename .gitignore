@@ -5,3 +5,7 @@ pdecompress
 packet*
 threads
 test_pthread
+*Proto1.header
+*Proto1.stream
+*Proto1.packet
+*Proto1.rblock
