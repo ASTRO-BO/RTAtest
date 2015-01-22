@@ -18,10 +18,10 @@
       <field name="LTtime" type="uint64" />
       <field name="ArrayID" type="uint16" />
       <field name="runNumber" type="uint16" />
-    </datafieldheader>
-    <sourcedatafield>
       <field name="eventNumber" type="uint32" />
       <field name="TelescopeID" type="uint16" />
+    </datafieldheader>
+    <sourcedatafield>
       <field name="numberOfTriggeredTelescopes" type="uint8" />
       <field name="telescopeCounter" type="uint8" />
       <field name="Number of pixels" type="uint16" id="ntt" />
