@@ -11,7 +11,7 @@
 #define __CL_ENABLE_EXCEPTIONS
 #include <CL/cl.hpp>
 
-#define PRINTALG 1
+//#define DEBUG 1
 
 inline std::string loadProgram(std::string input)
 {
@@ -101,9 +101,12 @@ int main(int argc, char *argv[])
 		int telTypeSim = teltype->getID();
 		const unsigned int npixels = teltype->getCameraType()->getNpixels();
 		const unsigned int nsamples = teltype->getCameraType()->getPixel(0)->getPixelType()->getNSamples();
+
 		// compute
+#ifdef DEBUG
 		std::cout << workgroupSize << std::endl;
 		std::cout << npixels << std::endl;
+#endif
 		
 		cl::Buffer waveCLBuffer(context, CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY, buffSize*sizeof(buff), buff, NULL);
 
@@ -126,9 +129,9 @@ int main(int argc, char *argv[])
 		cl::NDRange global(npixels);
 		cl::NDRange local(1);
 		queue.enqueueNDRangeKernel(koWaveextract, cl::NullRange, global, local);
-
-#ifdef PRINTALG
 		queue.finish();
+
+#ifdef DEBUG
 		std::cout << "npixels = " << npixels << std::endl;
 		std::cout << "nsamples = " << nsamples << std::endl;
 		for(int pixel = 0; pixel<npixels; pixel++) {
