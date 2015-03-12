@@ -29,7 +29,7 @@ int main(int argc, char *argv[])
 	if(argc <= 3)
 	{
 		std::cout << "Wrong arguments, please provide config file, raw input file and number of packets." << std::endl;
-		std::cout << argv[0] << " <configfile> <inputfile> <npackets>" << std::endl;
+		std::cout << argv[0] << " config.xml input.raw <npackets>" << std::endl;
 		return 1;
 	}
 	const std::string configFilename(realpath(argv[1], NULL));

@@ -691,18 +691,20 @@ std::vector<ByteStreamPtr> createZlibBuffer(PacketBufferV* buff)
 
 int main(int argc, char *argv[])
 {
-	cout << "Size of short: " << sizeof(short) << " - Size of int: " << sizeof(int) << " - Size of long: " <<  sizeof(long) << " - Size of long long: " << sizeof(long long) << endl;
+//	cout << "Size of short: " << sizeof(short) << " - Size of int: " << sizeof(int) << " - Size of long: " <<  sizeof(long) << " - Size of long long: " << sizeof(long long) << endl;
 	
 	struct timespec start, stop;
 	
 
 	if(argc <= 4) {
-		std::cerr << "ERROR: Please, provide the .raw, .stream, number of threads, algorithm (waveextractdata, waveextractpacket, decodepacket, routingpacket, compresslz4, decompresslz4, compressZlib or decompressZlib) [optional: Number of packet per threads,  Compression level]." << std::endl;
-		std::cerr << "Example ./test_pthread $CTARTA/data/Aar.ABTEST.FADC.BIGTRUE.raw rta_fadc_all_BIGTRUE.stream 8 waveextractdata [10000 1]" << std::endl;
+		std::cout << "Wrong number of arguments." << std::endl;
+		std::cout << "Usage: " << argv[0] << " conf.xml input.raw number_of_threads algorithm [packets_per_thread (default 10000)] [compression_level (default 1)]" << std::endl;
+		std::cout << std::endl << "The algorithm can be one of the following:" << std::endl;
+		std::cout << "waveextractdata, waveextractpacket, decodepacket, routingpacket, compresslz4, decompresslz4, compressZlib or decompressZlib." << std::endl;
 		return 0;
 	}
 	
-	configFileName = argv[2];
+	configFileName = argv[1];
 	NTHREADS = atoi(argv[3]);
 
 	// parse input algorithm
@@ -726,8 +728,8 @@ int main(int argc, char *argv[])
 		alg = &decompressZlib;
 	else
 	{
-		std::cerr << "Wrong algorithm: " << argv[2] << std::endl;
-		std::cerr << "Please, provide the .raw and algorithm (waveextractdata, waveextractpacket, decodepacket, routingpacket, compresslz4, decompresslz4, compressZlib or decompressZlib)." << std::endl;
+		std::cout << "Wrong algorithm name: " << argv[4] << std::endl;
+		std::cout << "Use one of the following: waveextractdata, waveextractpacket, decodepacket, routingpacket, compresslz4, decompresslz4, compressZlib or decompressZlib." << std::endl;
 		return 0;
 	}
 	std::cout << "Using algorithm: " << algorithmStr << std::endl;
@@ -738,7 +740,7 @@ int main(int argc, char *argv[])
 	
 	}
 
-	PacketBufferV buff(configFileName, argv[1]);
+	PacketBufferV buff(configFileName, argv[2]);
 	buff.load();
 	int npackets = buff.size();
 	std::cout << "Loaded " << npackets << " packets " << std::endl;
