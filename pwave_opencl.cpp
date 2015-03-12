@@ -69,7 +69,7 @@ int main(int argc, char *argv[])
 
 	cl::Program program(context, loadProgram("extract_wave.cl"));
 
-	program.build(devices, "-g -s extract_wave.cl");
+	program.build(devices);
 
 	cl::Kernel koWaveextract(program, "waveextract");
 
