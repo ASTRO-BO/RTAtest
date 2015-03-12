@@ -1,12 +1,3 @@
-pwave
-pwave_minimal
-pwave_opencl
-pcompress
-pdecompress
-packet*
-threads
-test_pthread
-*Proto1.header
-*Proto1.stream
-*Proto1.packet
-*Proto1.rblock
+pthreads
+mt
+pwave_cl
