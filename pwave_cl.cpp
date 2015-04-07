@@ -11,7 +11,7 @@
 #define __CL_ENABLE_EXCEPTIONS
 #include <CL/cl.hpp>
 
-#define DEBUG 1
+//#define DEBUG 1
 
 inline std::string loadProgram(std::string input)
 {
@@ -46,36 +46,58 @@ int main(int argc, char *argv[])
 	array_conf.loadConfig("AARPROD2", "PROD2_telconfig.fits.gz", "Aar.conf", "conf/");
 	std::cout << "Load complete!" << std::endl;
 
-
 	std::chrono::time_point<std::chrono::system_clock> start, end;
 	unsigned int message_count = 0, message_size = 0;
 
-	cl::Context context(CL_DEVICE_TYPE_DEFAULT);
-	cl::CommandQueue queue(context);
-	std::vector<cl::Device> devices = context.getInfo<CL_CONTEXT_DEVICES>();
-	cl::Device device = devices[0];
-	std::cout << "OpenCL infos: " << std::endl;
-	std::string info;
-	device.getInfo(CL_DEVICE_NAME, &info);
-	std::cout << info << std::endl;
-	device.getInfo(CL_DEVICE_OPENCL_C_VERSION, &info);
-	std::cout << info << std::endl;
-	device.getInfo(CL_DEVICE_VENDOR, &info);
-	std::cout << info << std::endl;
-	device.getInfo(CL_DEVICE_VERSION, &info);
-	std::cout << info << std::endl;
-	device.getInfo(CL_DRIVER_VERSION, &info);
-	std::cout << info << std::endl;
+	std::vector<cl::Platform> platforms;
+	cl::Platform::get(&platforms);
+	for(unsigned int i=0; i<platforms.size(); i++)
+	{
+		cl::Platform platform = platforms[i];
+        std::cout << "----------------------------" << std::endl;
+		std::cout << "Platform " << i << " info:" << std::endl;
+		std::string info;
+		platform.getInfo(CL_PLATFORM_NAME, &info);
+		std::cout << info << std::endl;
+		platform.getInfo(CL_PLATFORM_VERSION, &info);
+		std::cout << info << std::endl;
+		platform.getInfo(CL_PLATFORM_VENDOR, &info);
+		std::cout << info << std::endl;
+	}
 
-	cl::Program program(context, loadProgram("extract_wave.cl"));
+	std::vector<cl::Device> devices;
+	platforms[0].getDevices(CL_DEVICE_TYPE_ALL, &devices);
+    std::cout << "Using platform 0." << std::endl;
+	for(unsigned int i=0; i<devices.size(); i++)
+	{
+		cl::Device device = devices[i];
+        std::cout << "----------------------------" << std::endl;
+		std::cout << "Device " << i << " info:" << std::endl;
+		std::string info;
+		device.getInfo(CL_DEVICE_NAME, &info);
+		std::cout << info << std::endl;
+		device.getInfo(CL_DEVICE_VENDOR, &info);
+		std::cout << info << std::endl;
+		device.getInfo(CL_DEVICE_VERSION, &info);
+		std::cout << info << std::endl;
+		device.getInfo(CL_DRIVER_VERSION, &info);
+		std::cout << info << std::endl;
+	}
 
+    std::cout << "Using device 0." << std::endl;
+	cl::Context context(devices);
+
+	cl::CommandQueue queue(context, devices[0], 0, NULL);
+
+    std::string source = loadProgram("extract_wave.cl");
+
+	cl::Program::Sources sources(1, std::make_pair(source.c_str(), source.length()));
+	cl::Program program(context, sources);
 	program.build(devices);
 
 	cl::Kernel koWaveextract(program, "waveextract");
 
-	::size_t workgroupSize = koWaveextract.getWorkGroupInfo<CL_KERNEL_WORK_GROUP_SIZE>(device);
-
-	auto waveextract = cl::make_kernel<cl::Buffer, int, int, int, cl::Buffer, cl::Buffer>(program, "waveextract");
+	::size_t workgroupSize = koWaveextract.getWorkGroupInfo<CL_KERNEL_WORK_GROUP_SIZE>(devices[0]);
 
 	start = std::chrono::system_clock::now();
 	while(message_count++ < numevents)
@@ -128,9 +150,9 @@ int main(int argc, char *argv[])
 		koWaveextract.setArg(4, maxresCLBuffer);
 		koWaveextract.setArg(5, timeresCLBuffer);
 
-		queue.enqueueMapBuffer(waveCLBuffer, CL_TRUE, CL_MAP_WRITE, 0, buffSize);
-		queue.enqueueMapBuffer(maxresCLBuffer, CL_TRUE, CL_MAP_READ, 0, npixels);
-		queue.enqueueMapBuffer(timeresCLBuffer, CL_TRUE, CL_MAP_READ, 0, npixels);
+		queue.enqueueMapBuffer(waveCLBuffer, CL_FALSE, CL_MAP_WRITE, 0, buffSize);
+		queue.enqueueMapBuffer(maxresCLBuffer, CL_FALSE, CL_MAP_READ, 0, npixels);
+		queue.enqueueMapBuffer(timeresCLBuffer, CL_FALSE, CL_MAP_READ, 0, npixels);
 
 		cl::NDRange global(npixels);
 		cl::NDRange local(1);
