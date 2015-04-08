@@ -87,7 +87,7 @@ int main(int argc, char *argv[])
     std::cout << "Using device 0." << std::endl;
 	cl::Context context(devices);
 
-	cl::CommandQueue queue(context, devices[0], 0, NULL);
+	cl::CommandQueue queue(context, devices[0], CL_QUEUE_PROFILING_ENABLE, NULL);
 
 #ifdef CL_ALTERA
     std::ifstream file("extract_wave.aocx", std::ios::binary);
