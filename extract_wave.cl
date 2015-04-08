@@ -8,38 +8,38 @@ __kernel void waveextract(
 	__global unsigned short* restrict maxres,
 	__global unsigned short* restrict timeres)
 {
-	int gid = get_global_id(0);
+    int gid = get_global_id(0);
+	unsigned int idx = gid*nsamples;
+
+    // copy samples into private memory
+    unsigned short samples[100];
+    for(unsigned int i=0; i<nsamples; i++) {
+        samples[i] = buffer[idx+i];
+    }
 
 	long sumn = 0;
-	long sumd = 0;
+	long sumd = 1;
 
-	// terribru slow s[j] access to global memory (false sharing) copy s to local buffer.
-	//unsigned short* s = (unsigned short*) (buffer + gid * nsamples);
-
-	int j;
-	for(j=0; j<ws; j++) {
-		sumn += (buffer+gid*nsamples)[j] * j;
-		sumd += (buffer+gid*nsamples)[j];
+	for(unsigned int j=0; j<ws; j++) {
+		sumn += samples[j] * j;
+		sumd += samples[j];
 	}
 
 	unsigned short max = sumd;
-	double t = 0;
-	if(sumd != 0)
-		t = sumn / (double)sumd;
+	double t = (double)sumn / (double)sumd;
 
 	double maxt = t;
-	long maxj = 0;
 
-	for(j=1; j<nsamples-ws; j++) {
-		sumn = sumn - (buffer+gid*nsamples)[j-1] * (j-1) + (buffer+gid*nsamples)[j+ws-1] * (j+ws-1);
-		sumd = sumd - (buffer+gid*nsamples)[j-1] + (buffer+gid*nsamples)[j+ws-1];
+	for(unsigned int j=1; j<nsamples-ws; j++) {
+	    unsigned int prev = j-1;
+	    unsigned int succ = j+ws-1;
+		sumn = sumn - samples[prev] * prev + samples[succ] * succ;
+		sumd = sumd - samples[prev] + samples[succ];
 
 		if(sumd > max) {
 			max = sumd;
-			if(sumd != 0)
-				t = sumn / (double)sumd;
+			t = (double) sumn / (double)sumd;
 			maxt = t;
-			maxj = j;
 		}
 	}
 
