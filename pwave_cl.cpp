@@ -47,7 +47,7 @@ int main(int argc, char *argv[])
 	std::cout << "Load complete!" << std::endl;
 
 	std::chrono::time_point<std::chrono::system_clock> start, end;
-	unsigned int message_count = 0, message_size = 0;
+	unsigned long event_count = 0, event_size = 0;
 
 	std::vector<cl::Platform> platforms;
 	cl::Platform::get(&platforms);
@@ -100,10 +100,10 @@ int main(int argc, char *argv[])
 	::size_t workgroupSize = koWaveextract.getWorkGroupInfo<CL_KERNEL_WORK_GROUP_SIZE>(devices[0]);
 
 	start = std::chrono::system_clock::now();
-	while(message_count++ < numevents)
+	while(event_count++ < numevents)
 	{
 		PacketLib::ByteStreamPtr event = events.getNext();
-		message_size += event->size();
+		event_size += event->size();
 
 		/// swap if the stream has a different endianity
 #ifdef ARCH_BIGENDIAN
@@ -177,11 +177,11 @@ int main(int argc, char *argv[])
 
 	end = std::chrono::system_clock::now();
 	std::chrono::duration<double> elapsed = end-start;
-	double msgs = message_count / elapsed.count();
-	double mbits = ((message_size / 1000000) * 8) / elapsed.count();
-	std::cout << message_count << "messages sent in " << elapsed.count() << " s" << std::endl;
-	std::cout << "mean message size: " << message_size / message_count << std::endl;
-	std::cout << "throughput: " << msgs << " msg/s = " << mbits << " mbit/s" << std::endl;
+	double throughput = event_count / elapsed.count();
+	double mbytes = (event_size / 1000000) / elapsed.count();
+	std::cout << event_count << " events sent in " << elapsed.count() << " s" << std::endl;
+	std::cout << "mean event size: " << event_size / event_count << " B" << std::endl;
+	std::cout << "throughput: " << throughput << " event/s = " << mbytes << " MB/s" << std::endl;
 
 	return 0;
 }
