@@ -97,7 +97,16 @@ int main(int argc, char *argv[])
 
 	cl::Kernel koWaveextract(program, "waveextract");
 
-	::size_t workgroupSize = koWaveextract.getWorkGroupInfo<CL_KERNEL_WORK_GROUP_SIZE>(devices[0]);
+#ifdef DEBUG
+    ::size_t kinfo = koWaveextract.getWorkGroupInfo<CL_KERNEL_WORK_GROUP_SIZE>(devices[0]);
+    std::cout << "wg size:          " << kinfo << std::endl;
+    kinfo = koWaveextract.getWorkGroupInfo<CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE>(devices[0]);
+    std::cout << "pref wg size:     " << kinfo << std::endl;
+    kinfo = koWaveextract.getWorkGroupInfo<CL_KERNEL_LOCAL_MEM_SIZE>(devices[0]);
+    std::cout << "local mem size:   " << kinfo << std::endl;
+    kinfo = koWaveextract.getWorkGroupInfo<CL_KERNEL_PRIVATE_MEM_SIZE>(devices[0]);
+    std::cout << "private mem size: " << kinfo << std::endl;
+#endif
 
 	start = std::chrono::system_clock::now();
 	while(event_count++ < numevents)
@@ -130,10 +139,6 @@ int main(int argc, char *argv[])
 		int telTypeSim = teltype->getID();
 		const unsigned int npixels = teltype->getCameraType()->getNpixels();
 		const unsigned int nsamples = teltype->getCameraType()->getPixel(0)->getPixelType()->getNSamples();
-#ifdef DEBUG
-		std::cout << workgroupSize << std::endl;
-		std::cout << npixels << std::endl;
-#endif
 
 		// compute waveform extraction
 		cl::Buffer waveCLBuffer(context, CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY, buffSize, buff, NULL);
