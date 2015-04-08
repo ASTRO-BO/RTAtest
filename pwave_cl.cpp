@@ -160,7 +160,7 @@ int main(int argc, char *argv[])
 #endif
 
 		// compute waveform extraction
-		cl::Buffer waveCLBuffer(context, CL_MEM_READ_ONLY, buffSize*sizeof(buff), NULL, NULL);
+		cl::Buffer waveCLBuffer(context, CL_MEM_READ_ONLY, buffSize, NULL, NULL);
 
 		std::vector<unsigned short>* maxres = new std::vector<unsigned short>(npixels);
 		std::vector<unsigned short>* timeres = new std::vector<unsigned short>(npixels);
@@ -175,7 +175,7 @@ int main(int argc, char *argv[])
 		koWaveextract.setArg(5, timeresCLBuffer);
 
         cl::Event writeEvt;
-        queue.enqueueWriteBuffer(waveCLBuffer, CL_FALSE, 0, buffSize*sizeof(buff), buff, 0, &writeEvt);
+        queue.enqueueWriteBuffer(waveCLBuffer, CL_FALSE, 0, buffSize, buff, 0, &writeEvt);
         std::vector<cl::Event> writeEvtList(1);
         writeEvtList[0] = writeEvt;
 
