@@ -90,7 +90,6 @@ int main(int argc, char *argv[])
 	cl::CommandQueue queue(context, devices[0], 0, NULL);
 
 #ifdef CL_ALTERA
-    // reprogram the FPGA
     std::ifstream file("extract_wave.aocx", std::ios::binary);
     file.seekg(0, std::ios::end);
     std::streamsize size = file.tellg();
@@ -110,6 +109,20 @@ int main(int argc, char *argv[])
 	cl::Kernel koWaveextract(program, "waveextract");
 
 	::size_t workgroupSize = koWaveextract.getWorkGroupInfo<CL_KERNEL_WORK_GROUP_SIZE>(devices[0]);
+
+
+    const unsigned int MAX_NUM_SAMPLES = 100;
+    const unsigned int MAX_NUM_PIXELS = 3000;
+
+    unsigned short maxres[MAX_NUM_PIXELS];
+    unsigned short timeres[MAX_NUM_PIXELS];
+
+    cl::Buffer inputBuffer(context, CL_MEM_READ_ONLY, MAX_NUM_PIXELS*MAX_NUM_SAMPLES, NULL, NULL);
+    cl::Buffer maxresBuffer(context, CL_MEM_WRITE_ONLY, MAX_NUM_PIXELS*sizeof(unsigned short), NULL, NULL);
+    cl::Buffer timeresBuffer(context, CL_MEM_WRITE_ONLY, MAX_NUM_PIXELS*sizeof(unsigned short), NULL, NULL);
+    PacketLib::byte* inputMBuffer = (PacketLib::byte*) queue.enqueueMapBuffer(inputBuffer, CL_FALSE, CL_MAP_WRITE, 0, MAX_NUM_PIXELS*MAX_NUM_SAMPLES);
+    unsigned short* maxresMBuffer = (unsigned short*) queue.enqueueMapBuffer(maxresBuffer, CL_FALSE, CL_MAP_READ, 0, MAX_NUM_PIXELS);
+    unsigned short* timeresMBuffer = (unsigned short*) queue.enqueueMapBuffer(timeresBuffer, CL_FALSE, CL_MAP_READ, 0, MAX_NUM_PIXELS);
 
 	start = std::chrono::system_clock::now();
 	while(event_count++ < numevents)
@@ -137,13 +150,6 @@ int main(int argc, char *argv[])
 		PacketLib::byte* buff = packet->getData()->getStream();
 		PacketLib::dword buffSize = packet->getData()->size();
 
-#ifdef CL_ALTERA
-        /// align memory to 64 for DMA
-        void* alignedBuff;
-        posix_memalign((void**)&alignedBuff, 64, buffSize+(buffSize%64));
-        memcpy(alignedBuff, buff, buffSize);
-#endif
-
 		/// get npixels and nsamples from ctaconfig using the telescopeID
 		CTAConfig::CTAMDTelescopeType* teltype = array_conf.getTelescope(telescopeID)->getTelescopeType();
 		int telTypeSim = teltype->getID();
@@ -154,37 +160,25 @@ int main(int argc, char *argv[])
 		std::cout << npixels << std::endl;
 #endif
 
-		// compute waveform extraction
-		cl::Buffer waveCLBuffer(context, CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY, buffSize, buff, NULL);
+        // send the data to the device
+        memcpy(inputMBuffer, buff, buffSize);
 
-#ifdef CL_ALTERA
-        unsigned short *maxres, *timeres;
-        posix_memalign((void**)&maxres, 64, npixels * sizeof(unsigned short));
-        posix_memalign((void**)&timeres, 64, npixels * sizeof(unsigned short));
-        cl::Buffer maxresCLBuffer(context, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY, npixels*sizeof(unsigned short), maxres, NULL);
-        cl::Buffer timeresCLBuffer(context, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY, npixels*sizeof(unsigned short), timeres, NULL);
-#else
-        std::vector<unsigned short> maxres(npixels);
-        std::vector<unsigned short> timeres(npixels);
-        cl::Buffer maxresCLBuffer(context, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY, npixels*sizeof(unsigned short), maxres.data(), NULL);
-        cl::Buffer timeresCLBuffer(context, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY, npixels*sizeof(unsigned short), timeres.data(), NULL);
-#endif
-
-		koWaveextract.setArg(0, waveCLBuffer);
+		// compute kernel
+		koWaveextract.setArg(0, inputBuffer);
 		koWaveextract.setArg(1, npixels);
 		koWaveextract.setArg(2, nsamples);
 		koWaveextract.setArg(3, 6);
-		koWaveextract.setArg(4, maxresCLBuffer);
-		koWaveextract.setArg(5, timeresCLBuffer);
-
-		queue.enqueueMapBuffer(waveCLBuffer, CL_FALSE, CL_MAP_WRITE, 0, buffSize);
-		queue.enqueueMapBuffer(maxresCLBuffer, CL_FALSE, CL_MAP_READ, 0, npixels);
-		queue.enqueueMapBuffer(timeresCLBuffer, CL_FALSE, CL_MAP_READ, 0, npixels);
+		koWaveextract.setArg(4, maxresBuffer);
+		koWaveextract.setArg(5, timeresBuffer);
 
 		cl::NDRange global(npixels);
 		cl::NDRange local(1);
 		queue.enqueueNDRangeKernel(koWaveextract, cl::NullRange, global, local);
+
+		// get the data back from the device
 		queue.finish();
+		memcpy(maxres, maxresMBuffer, npixels*sizeof(unsigned short));
+		memcpy(timeres, timeresMBuffer, npixels*sizeof(unsigned short));
 
 #ifdef DEBUG
 		std::cout << "npixels = " << npixels << std::endl;
