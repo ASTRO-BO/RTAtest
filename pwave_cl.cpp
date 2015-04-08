@@ -89,10 +89,22 @@ int main(int argc, char *argv[])
 
 	cl::CommandQueue queue(context, devices[0], 0, NULL);
 
+#ifdef CL_ALTERA
+    // reprogram the FPGA
+    std::ifstream file("extract_wave.aocx", std::ios::binary);
+    file.seekg(0, std::ios::end);
+    std::streamsize size = file.tellg();
+    file.seekg(0, std::ios::beg);
+    std::vector<char> b(size);
+    file.read(b.data(), size);
+    cl::Program::Binaries binaries(1, std::make_pair(&b[0], size));
+    cl::Program program(context, devices, binaries);
+#else
     std::string source = loadProgram("extract_wave.cl");
-
 	cl::Program::Sources sources(1, std::make_pair(source.c_str(), source.length()));
 	cl::Program program(context, sources);
+#endif
+
 	program.build(devices);
 
 	cl::Kernel koWaveextract(program, "waveextract");
@@ -125,6 +137,13 @@ int main(int argc, char *argv[])
 		PacketLib::byte* buff = packet->getData()->getStream();
 		PacketLib::dword buffSize = packet->getData()->size();
 
+#ifdef CL_ALTERA
+        /// align memory to 64 for DMA
+        void* alignedBuff;
+        posix_memalign((void**)&alignedBuff, 64, buffSize+(buffSize%64));
+        memcpy(alignedBuff, buff, buffSize);
+#endif
+
 		/// get npixels and nsamples from ctaconfig using the telescopeID
 		CTAConfig::CTAMDTelescopeType* teltype = array_conf.getTelescope(telescopeID)->getTelescopeType();
 		int telTypeSim = teltype->getID();
@@ -138,10 +157,18 @@ int main(int argc, char *argv[])
 		// compute waveform extraction
 		cl::Buffer waveCLBuffer(context, CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY, buffSize, buff, NULL);
 
-		std::vector<unsigned short> maxres(npixels);
-		std::vector<unsigned short> timeres(npixels);
-		cl::Buffer maxresCLBuffer(context, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY, npixels*sizeof(unsigned short), maxres.data(), NULL);
-		cl::Buffer timeresCLBuffer(context, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY, npixels*sizeof(unsigned short), timeres.data(), NULL);
+#ifdef CL_ALTERA
+        unsigned short *maxres, *timeres;
+        posix_memalign((void**)&maxres, 64, npixels * sizeof(unsigned short));
+        posix_memalign((void**)&timeres, 64, npixels * sizeof(unsigned short));
+        cl::Buffer maxresCLBuffer(context, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY, npixels*sizeof(unsigned short), maxres, NULL);
+        cl::Buffer timeresCLBuffer(context, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY, npixels*sizeof(unsigned short), timeres, NULL);
+#else
+        std::vector<unsigned short> maxres(npixels);
+        std::vector<unsigned short> timeres(npixels);
+        cl::Buffer maxresCLBuffer(context, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY, npixels*sizeof(unsigned short), maxres.data(), NULL);
+        cl::Buffer timeresCLBuffer(context, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY, npixels*sizeof(unsigned short), timeres.data(), NULL);
+#endif
 
 		koWaveextract.setArg(0, waveCLBuffer);
 		koWaveextract.setArg(1, npixels);
