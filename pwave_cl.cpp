@@ -24,6 +24,30 @@ inline std::string loadProgram(std::string input)
 			(std::istreambuf_iterator<char>()));
 }
 
+void maxresCallback(cl_event event, cl_int command_exec_status, void* user_data)
+{
+#ifdef DEBUG
+    std::vector<unsigned short>* maxres = (std::vector<unsigned short>*)user_data;
+	std::cout << "event waves max: " << std::endl;
+	for(int pixel = 0; pixel<(*maxres).size(); pixel++) {
+		std::cout << (*maxres)[pixel] << " ";
+	}
+    std::cout << std::endl;
+#endif
+}
+
+void timeresCallback(cl_event event, cl_int command_exec_status, void* user_data)
+{
+#ifdef DEBUG
+    std::vector<unsigned short>* timeres = (std::vector<unsigned short>*)user_data;
+	std::cout << "event waves time: " << (*timeres).size() << std::endl;
+	for(int pixel = 0; pixel<(*timeres).size(); pixel++) {
+		std::cout << (*timeres)[pixel] << " ";
+	}
+    std::cout << std::endl;
+#endif
+}
+
 int main(int argc, char *argv[])
 {
 	if(argc <= 3)
@@ -87,7 +111,7 @@ int main(int argc, char *argv[])
     std::cout << "Using device 0." << std::endl;
 	cl::Context context(devices);
 
-	cl::CommandQueue queue(context, devices[0], 0, NULL);
+	cl::CommandQueue queue(context, devices[0], CL_QUEUE_OUT_OF_ORDER_EXEC_MODE_ENABLE, NULL);
 
     std::string source = loadProgram("extract_wave.cl");
 
@@ -136,12 +160,12 @@ int main(int argc, char *argv[])
 #endif
 
 		// compute waveform extraction
-		cl::Buffer waveCLBuffer(context, CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY, buffSize*sizeof(buff), buff, NULL);
+		cl::Buffer waveCLBuffer(context, CL_MEM_READ_ONLY, buffSize*sizeof(buff), NULL, NULL);
 
-		std::vector<unsigned short> maxres(npixels);
-		std::vector<unsigned short> timeres(npixels);
-		cl::Buffer maxresCLBuffer(context, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY, npixels*sizeof(unsigned short), maxres.data(), NULL);
-		cl::Buffer timeresCLBuffer(context, CL_MEM_USE_HOST_PTR | CL_MEM_WRITE_ONLY, npixels*sizeof(unsigned short), timeres.data(), NULL);
+		std::vector<unsigned short>* maxres = new std::vector<unsigned short>(npixels);
+		std::vector<unsigned short>* timeres = new std::vector<unsigned short>(npixels);
+		cl::Buffer maxresCLBuffer(context, CL_MEM_WRITE_ONLY, npixels*sizeof(unsigned short), NULL, NULL);
+		cl::Buffer timeresCLBuffer(context, CL_MEM_WRITE_ONLY, npixels*sizeof(unsigned short), NULL, NULL);
 
 		koWaveextract.setArg(0, waveCLBuffer);
 		koWaveextract.setArg(1, npixels);
@@ -150,29 +174,23 @@ int main(int argc, char *argv[])
 		koWaveextract.setArg(4, maxresCLBuffer);
 		koWaveextract.setArg(5, timeresCLBuffer);
 
-		queue.enqueueMapBuffer(waveCLBuffer, CL_FALSE, CL_MAP_WRITE, 0, buffSize);
-		queue.enqueueMapBuffer(maxresCLBuffer, CL_FALSE, CL_MAP_READ, 0, npixels);
-		queue.enqueueMapBuffer(timeresCLBuffer, CL_FALSE, CL_MAP_READ, 0, npixels);
+        cl::Event writeEvt;
+        queue.enqueueWriteBuffer(waveCLBuffer, CL_FALSE, 0, buffSize*sizeof(buff), buff, 0, &writeEvt);
+        std::vector<cl::Event> writeEvtList(1);
+        writeEvtList[0] = writeEvt;
 
 		cl::NDRange global(npixels);
 		cl::NDRange local(1);
-		queue.enqueueNDRangeKernel(koWaveextract, cl::NullRange, global, local);
-		queue.finish();
+        cl::Event execEvt;
+		queue.enqueueNDRangeKernel(koWaveextract, cl::NullRange, global, local, &writeEvtList, &execEvt);
+        std::vector<cl::Event> execEvtList(1);
+        execEvtList[0] = execEvt;
 
-#ifdef DEBUG
-		std::cout << "npixels = " << npixels << std::endl;
-		std::cout << "nsamples = " << nsamples << std::endl;
-		for(int pixel = 0; pixel<npixels; pixel++) {
-			PacketLib::word* s = (PacketLib::word*) buff + pixel * nsamples;
-			std::cout << "pixel " << pixel << " samples ";
-			for(int k=0; k<nsamples; k++) {
-				std::cout << s[k] << " ";
-			}
-			std::cout << std::endl;
-
-			std::cout << "result " << " " << maxres[pixel] << " " << timeres[pixel] << " " << std::endl;
-		}
-#endif
+        cl::Event maxresEvt, timeresEvt;
+		queue.enqueueReadBuffer(maxresCLBuffer, CL_FALSE, 0, npixels*sizeof(unsigned short), &(*maxres)[0], &execEvtList, &maxresEvt);
+        maxresEvt.setCallback(CL_COMPLETE, maxresCallback, maxres);
+		queue.enqueueReadBuffer(timeresCLBuffer, CL_FALSE, 0, npixels*sizeof(unsigned short), &(*timeres)[0], &execEvtList, &timeresEvt);
+        timeresEvt.setCallback(CL_COMPLETE, timeresCallback, timeres);
 	}
 
 	end = std::chrono::system_clock::now();
