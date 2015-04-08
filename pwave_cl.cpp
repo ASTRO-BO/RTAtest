@@ -47,7 +47,7 @@ int main(int argc, char *argv[])
 	std::cout << "Load complete!" << std::endl;
 
 	std::chrono::time_point<std::chrono::system_clock> start, end;
-	unsigned int message_count = 0, message_size = 0;
+	unsigned long event_count = 0, event_size = 0;
 
 	std::vector<cl::Platform> platforms;
 	cl::Platform::get(&platforms);
@@ -100,10 +100,10 @@ int main(int argc, char *argv[])
 	::size_t workgroupSize = koWaveextract.getWorkGroupInfo<CL_KERNEL_WORK_GROUP_SIZE>(devices[0]);
 
 	start = std::chrono::system_clock::now();
-	while(message_count++ < numevents)
+	while(event_count++ < numevents)
 	{
 		PacketLib::ByteStreamPtr event = events.getNext();
-		message_size += event->size();
+		event_size += event->size();
 
 		/// swap if the stream has a different endianity
 #ifdef ARCH_BIGENDIAN
@@ -150,38 +150,32 @@ int main(int argc, char *argv[])
 		koWaveextract.setArg(4, maxresCLBuffer);
 		koWaveextract.setArg(5, timeresCLBuffer);
 
-		queue.enqueueMapBuffer(waveCLBuffer, CL_FALSE, CL_MAP_WRITE, 0, buffSize);
-		queue.enqueueMapBuffer(maxresCLBuffer, CL_FALSE, CL_MAP_READ, 0, npixels);
-		queue.enqueueMapBuffer(timeresCLBuffer, CL_FALSE, CL_MAP_READ, 0, npixels);
+        cl::Event writeEvt;
+        queue.enqueueWriteBuffer(waveCLBuffer, CL_FALSE, 0, buffSize*sizeof(buff), buff, 0, &writeEvt);
+        std::vector<cl::Event> writeEvtList(1);
+        writeEvtList[0] = writeEvt;
 
 		cl::NDRange global(npixels);
 		cl::NDRange local(1);
-		queue.enqueueNDRangeKernel(koWaveextract, cl::NullRange, global, local);
-		queue.finish();
+        cl::Event execEvt;
+		queue.enqueueNDRangeKernel(koWaveextract, cl::NullRange, global, local, &writeEvtList, &execEvt);
+        std::vector<cl::Event> execEvtList(1);
+        execEvtList[0] = execEvt;
 
-#ifdef DEBUG
-		std::cout << "npixels = " << npixels << std::endl;
-		std::cout << "nsamples = " << nsamples << std::endl;
-		for(int pixel = 0; pixel<npixels; pixel++) {
-			PacketLib::word* s = (PacketLib::word*) buff + pixel * nsamples;
-			std::cout << "pixel " << pixel << " samples ";
-			for(int k=0; k<nsamples; k++) {
-				std::cout << s[k] << " ";
-			}
-			std::cout << std::endl;
-
-			std::cout << "result " << " " << maxres[pixel] << " " << timeres[pixel] << " " << std::endl;
-		}
-#endif
+        cl::Event maxresEvt, timeresEvt;
+		queue.enqueueReadBuffer(maxresCLBuffer, CL_FALSE, 0, npixels*sizeof(unsigned short), &(*maxres)[0], &execEvtList, &maxresEvt);
+        maxresEvt.setCallback(CL_COMPLETE, maxresCallback, maxres);
+		queue.enqueueReadBuffer(timeresCLBuffer, CL_FALSE, 0, npixels*sizeof(unsigned short), &(*timeres)[0], &execEvtList, &timeresEvt);
+        timeresEvt.setCallback(CL_COMPLETE, timeresCallback, timeres);
 	}
 
 	end = std::chrono::system_clock::now();
 	std::chrono::duration<double> elapsed = end-start;
-	double msgs = message_count / elapsed.count();
-	double mbits = ((message_size / 1000000) * 8) / elapsed.count();
-	std::cout << message_count << "messages sent in " << elapsed.count() << " s" << std::endl;
-	std::cout << "mean message size: " << message_size / message_count << std::endl;
-	std::cout << "throughput: " << msgs << " msg/s = " << mbits << " mbit/s" << std::endl;
+	double throughput = event_count / elapsed.count();
+	double mbytes = (event_size / 1000000) / elapsed.count();
+	std::cout << event_count << " events sent in " << elapsed.count() << " s" << std::endl;
+	std::cout << "mean event size: " << event_size / event_count << " B" << std::endl;
+	std::cout << "throughput: " << throughput << " event/s = " << mbytes << " MB/s" << std::endl;
 
 	return 0;
 }
