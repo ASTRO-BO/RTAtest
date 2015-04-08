@@ -1,4 +1,4 @@
-all: pthreads mt pwave_cl
+all: pthreads mt
 
 SYSTEM= $(shell gcc -dumpmachine)
 ifneq (, $(findstring linux, $(SYSTEM)))
