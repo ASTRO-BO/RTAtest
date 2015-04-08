@@ -136,7 +136,7 @@ int main(int argc, char *argv[])
 #endif
 
 		// compute waveform extraction
-		cl::Buffer waveCLBuffer(context, CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY, buffSize*sizeof(buff), buff, NULL);
+		cl::Buffer waveCLBuffer(context, CL_MEM_USE_HOST_PTR | CL_MEM_READ_ONLY, buffSize, buff, NULL);
 
 		std::vector<unsigned short> maxres(npixels);
 		std::vector<unsigned short> timeres(npixels);
