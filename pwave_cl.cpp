@@ -104,7 +104,18 @@ int main(int argc, char *argv[])
 	cl::Program program(context, sources);
 #endif
 
-	program.build(devices);
+    try {
+        program.build(devices);
+    }
+    catch (cl::Error err) {
+        if (err.err() == CL_BUILD_PROGRAM_FAILURE) {
+            cl_int err;
+            cl::STRING_CLASS buildlog = program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(devices[0], &err);
+            std::cout << "Building error! Log: " << std::endl;
+            std::cout << buildlog << std::endl;
+            exit(EXIT_FAILURE);
+        }
+    }
 
 	cl::Kernel koWaveextract(program, "waveextract");
 
