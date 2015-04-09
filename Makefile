@@ -18,4 +18,4 @@ mt: mt.cpp
 	$(CXX) $(CXXFLAGS) mt.cpp -o mt -lz -lpacket -pthread -lCTAUtils $(LIBS)
 
 clean:
-	@rm -f pthreads mt pwave_cl
+	@rm -r pthreads mt pwave_cl pwave_cl.dSYM
