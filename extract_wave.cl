@@ -1,4 +1,5 @@
 /* Kernel for waveform extraction */
+#pragma OPENCL EXTENSION cl_khr_fp64: enable
 
 __kernel void waveextract(
 	__global const unsigned short* restrict buffer,
