@@ -21,4 +21,4 @@ pwave_cl_altera: pwave_cl.cpp
 	$(CXX) -DCL_ALTERA -g -std=c++11 $(CXXFLAGS) `aocl compile-config` pwave_cl.cpp -o pwave_cl_altera -lpacket -lcfitsio -lCTAConfig -lCTAUtils -lpthread $(LIBS) `aocl link-config`
 
 clean:
-	@rm -r pthreads mt pwave_cl pwave_cl.dSYM
+	@rm -rf pthreads mt pwave_cl pwave_cl.dSYM
