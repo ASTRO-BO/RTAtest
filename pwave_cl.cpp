@@ -12,6 +12,7 @@
 #include <CL/cl.hpp>
 
 //#define DEBUG 1
+#define MULTIPLE_TIMERS 1
 
 inline std::string loadProgram(std::string input)
 {
@@ -147,11 +148,24 @@ int main(int argc, char *argv[])
     unsigned short* timeresMBuffer = (unsigned short*) queue.enqueueMapBuffer(timeresBuffer, CL_FALSE, CL_MAP_READ, 0, MAX_NUM_PIXELS);
 
 	std::chrono::time_point<std::chrono::system_clock> start, end;
-	unsigned long event_count = 0, event_size = 0;
+#ifdef MULTIPLE_TIMERS
+	std::chrono::time_point<std::chrono::system_clock> startcopyto, endcopyto;
+	std::chrono::time_point<std::chrono::system_clock> startcopyfrom, endcopyfrom;
+	std::chrono::time_point<std::chrono::system_clock> startpacket, endpacket;
+	std::chrono::time_point<std::chrono::system_clock> startkernel, endkernel;
+	std::chrono::duration<double> elapsedCopyTo(0.);
+	std::chrono::duration<double> elapsedCopyFrom(0.);
+	std::chrono::duration<double> elapsedPacket(0.);
+	std::chrono::duration<double> elapsedKernel(0.);
+#endif
+	unsigned long event_count = 0, event_size(0.);
 
 	start = std::chrono::system_clock::now();
 	while(event_count < numevents)
 	{
+#ifdef MULTIPLE_TIMERS
+        startpacket = std::chrono::system_clock::now();
+#endif
 		PacketLib::ByteStreamPtr event = events.getNext();
 		event_size += event->size();
 
@@ -182,12 +196,24 @@ int main(int argc, char *argv[])
 		const unsigned int nsamples = teltype->getCameraType()->getPixel(0)->getPixelType()->getNSamples();
 /*		std::cout << workgroupSize << std::endl;
 		std::cout << npixels << std::endl;*/
+#ifdef MULTIPLE_TIMERS
+        endpacket = std::chrono::system_clock::now();
+#endif
 
         // send the data to the device
+#ifdef MULTIPLE_TIMERS
+        startcopyto = std::chrono::system_clock::now();
+#endif
         memcpy(inputMBuffer, buff, buffSize);
+#ifdef MULTIPLE_TIMERS
+        endcopyto = std::chrono::system_clock::now();
+#endif
 
 		// compute kernel
-		koWaveextract.setArg(0, inputBuffer);
+#ifdef MULTIPLE_TIMERS
+        startkernel = std::chrono::system_clock::now();
+#endif
+        koWaveextract.setArg(0, inputBuffer);
 		koWaveextract.setArg(1, npixels);
 		koWaveextract.setArg(2, nsamples);
 		koWaveextract.setArg(3, 6);
@@ -200,8 +226,14 @@ int main(int argc, char *argv[])
 
 		// get the data back from the device
 		queue.finish();
+        endkernel = std::chrono::system_clock::now();
+
+        startcopyfrom = std::chrono::system_clock::now();
 		memcpy(maxres, maxresMBuffer, npixels*sizeof(unsigned short));
 		memcpy(timeres, timeresMBuffer, npixels*sizeof(unsigned short));
+#ifdef MULTIPLE_TIMERS
+        endcopyfrom = std::chrono::system_clock::now();
+#endif
 
 #ifdef DEBUG
 		std::cout << "npixels = " << npixels << std::endl;
@@ -218,7 +250,20 @@ int main(int argc, char *argv[])
 		}
 #endif
         event_count++;
+#ifdef MULTIPLE_TIMERS
+        elapsedCopyTo += endcopyto-startcopyto;
+        elapsedCopyFrom += endcopyfrom-startcopyfrom;
+        elapsedPacket += endpacket-startpacket;
+        elapsedKernel += endkernel-startkernel;
+#endif
 	}
+
+#ifdef MULTIPLE_TIMERS
+    std::cout << "Elapsed packet: " << elapsedPacket.count() << std::endl;
+    std::cout << "Elapsed copyto: " << elapsedCopyTo.count() << std::endl;
+    std::cout << "Elapsed kernel: " << elapsedKernel.count() << std::endl;
+    std::cout << "Elapsed copyfrom: " << elapsedCopyFrom.count() << std::endl;
+#endif
 
 	end = std::chrono::system_clock::now();
 	std::chrono::duration<double> elapsed = end-start;
