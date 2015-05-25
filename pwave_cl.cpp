@@ -26,15 +26,22 @@ inline std::string loadProgram(std::string input)
 
 int main(int argc, char *argv[])
 {
-	if(argc <= 3)
+	if(argc < 4)
 	{
 		std::cout << "Wrong arguments, please provide config file, raw input file and number of packets." << std::endl;
-		std::cout << argv[0] << " config.xml input.raw <npackets>" << std::endl;
+		std::cout << argv[0] << " config.xml input.raw <npackets> [platform] [device]" << std::endl;
 		return 1;
 	}
 	const std::string configFilename(realpath(argv[1], NULL));
 	const std::string inputFilename(realpath(argv[2], NULL));
 	const unsigned long numevents = std::atol(argv[3]);
+	unsigned int platformnum = 0;
+    unsigned int devicenum = 0;
+
+	if(argc >= 5)
+	    platformnum = atoi(argv[4]);
+    if(argc >= 6)
+	    devicenum = atoi(argv[5]);
 
 	// load events buffer
 	PacketLib::PacketBufferV events(configFilename, inputFilename);
@@ -45,9 +52,6 @@ int main(int argc, char *argv[])
 	std::cout << "Preloading.." << std::endl;
 	array_conf.loadConfig("AARPROD2", "PROD2_telconfig.fits.gz", "Aar.conf", "conf/");
 	std::cout << "Load complete!" << std::endl;
-
-	std::chrono::time_point<std::chrono::system_clock> start, end;
-	unsigned long event_count = 0, event_size = 0;
 
 	std::vector<cl::Platform> platforms;
 	cl::Platform::get(&platforms);
@@ -64,10 +68,13 @@ int main(int argc, char *argv[])
 		platform.getInfo(CL_PLATFORM_VENDOR, &info);
 		std::cout << info << std::endl;
 	}
+	if(platformnum > platforms.size()) {
+	    std::cout << "Cannot use the platform with number " << platformnum << "." << std::endl;
+	    return EXIT_FAILURE;
+    }
 
 	std::vector<cl::Device> devices;
-	platforms[0].getDevices(CL_DEVICE_TYPE_ALL, &devices);
-    std::cout << "Using platform 0." << std::endl;
+	platforms[platformnum].getDevices(CL_DEVICE_TYPE_ALL, &devices);
 	for(unsigned int i=0; i<devices.size(); i++)
 	{
 		cl::Device device = devices[i];
@@ -83,11 +90,16 @@ int main(int argc, char *argv[])
 		device.getInfo(CL_DRIVER_VERSION, &info);
 		std::cout << info << std::endl;
 	}
+	if(devicenum > devices.size()) {
+	    std::cout << "Cannot use the device with number " << devicenum << "." << std::endl;
+	    return EXIT_FAILURE;
+    }
 
-    std::cout << "Using device 0." << std::endl;
+    std::cout << "Using platform " << platformnum << "." << std::endl;
+    std::cout << "Using device " << devicenum  << "."<< std::endl;
+
 	cl::Context context(devices);
-
-	cl::CommandQueue queue(context, devices[0], CL_QUEUE_PROFILING_ENABLE, NULL);
+	cl::CommandQueue queue(context, devices[devicenum], CL_QUEUE_PROFILING_ENABLE, NULL);
 
 #ifdef CL_ALTERA
     std::ifstream file("extract_wave.aocx", std::ios::binary);
@@ -110,7 +122,7 @@ int main(int argc, char *argv[])
     catch (cl::Error err) {
         if (err.err() == CL_BUILD_PROGRAM_FAILURE) {
             cl_int err;
-            cl::STRING_CLASS buildlog = program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(devices[0], &err);
+            cl::STRING_CLASS buildlog = program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(devices[devicenum], &err);
             std::cout << "Building error! Log: " << std::endl;
             std::cout << buildlog << std::endl;
             exit(EXIT_FAILURE);
@@ -119,8 +131,7 @@ int main(int argc, char *argv[])
 
 	cl::Kernel koWaveextract(program, "waveextract");
 
-	::size_t workgroupSize = koWaveextract.getWorkGroupInfo<CL_KERNEL_WORK_GROUP_SIZE>(devices[0]);
-
+	::size_t workgroupSize = koWaveextract.getWorkGroupInfo<CL_KERNEL_WORK_GROUP_SIZE>(devices[devicenum]);
 
     const unsigned int MAX_NUM_SAMPLES = 100;
     const unsigned int MAX_NUM_PIXELS = 3000;
@@ -134,6 +145,9 @@ int main(int argc, char *argv[])
     PacketLib::byte* inputMBuffer = (PacketLib::byte*) queue.enqueueMapBuffer(inputBuffer, CL_FALSE, CL_MAP_WRITE, 0, MAX_NUM_PIXELS*MAX_NUM_SAMPLES);
     unsigned short* maxresMBuffer = (unsigned short*) queue.enqueueMapBuffer(maxresBuffer, CL_FALSE, CL_MAP_READ, 0, MAX_NUM_PIXELS);
     unsigned short* timeresMBuffer = (unsigned short*) queue.enqueueMapBuffer(timeresBuffer, CL_FALSE, CL_MAP_READ, 0, MAX_NUM_PIXELS);
+
+	std::chrono::time_point<std::chrono::system_clock> start, end;
+	unsigned long event_count = 0, event_size = 0;
 
 	start = std::chrono::system_clock::now();
 	while(event_count++ < numevents)
@@ -166,10 +180,8 @@ int main(int argc, char *argv[])
 		int telTypeSim = teltype->getID();
 		const unsigned int npixels = teltype->getCameraType()->getNpixels();
 		const unsigned int nsamples = teltype->getCameraType()->getPixel(0)->getPixelType()->getNSamples();
-#ifdef DEBUG
-		std::cout << workgroupSize << std::endl;
-		std::cout << npixels << std::endl;
-#endif
+/*		std::cout << workgroupSize << std::endl;
+		std::cout << npixels << std::endl;*/
 
         // send the data to the device
         memcpy(inputMBuffer, buff, buffSize);
@@ -184,7 +196,7 @@ int main(int argc, char *argv[])
 
 		cl::NDRange global(npixels);
 		cl::NDRange local(1);
-		queue.enqueueNDRangeKernel(koWaveextract, cl::NullRange, global, local);
+		queue.enqueueNDRangeKernel(koWaveextract, cl::NullRange, global, cl::NullRange);
 
 		// get the data back from the device
 		queue.finish();
