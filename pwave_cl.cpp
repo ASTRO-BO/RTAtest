@@ -150,7 +150,7 @@ int main(int argc, char *argv[])
 	unsigned long event_count = 0, event_size = 0;
 
 	start = std::chrono::system_clock::now();
-	while(event_count++ < numevents)
+	while(event_count < numevents)
 	{
 		PacketLib::ByteStreamPtr event = events.getNext();
 		event_size += event->size();
@@ -217,15 +217,16 @@ int main(int argc, char *argv[])
 			std::cout << "result " << " " << maxres[pixel] << " " << timeres[pixel] << " " << std::endl;
 		}
 #endif
+        event_count++;
 	}
 
 	end = std::chrono::system_clock::now();
 	std::chrono::duration<double> elapsed = end-start;
 	double throughput = event_count / elapsed.count();
-	double mbytes = (event_size / 1000000) / elapsed.count();
+	double throughput2 = event_size / elapsed.count() / 1000000;
 	std::cout << event_count << " events sent in " << elapsed.count() << " s" << std::endl;
-	std::cout << "mean event size: " << event_size / event_count << " B" << std::endl;
-	std::cout << "throughput: " << throughput << " event/s = " << mbytes << " MB/s" << std::endl;
+	std::cout << "mean event size: " << event_size / event_count << std::endl;
+	std::cout << "throughput: " << throughput << " msg/s = " << throughput2 << " MB/s" << std::endl;
 
-	return 0;
+	return EXIT_SUCCESS;
 }
