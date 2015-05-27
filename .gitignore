@@ -1,6 +1,7 @@
 pthreads
 mt
 pwave_serial
+pwave_omp
 pwave_cl
 pwave_cl_altera
 pwave_cl.dSYM
