@@ -1,49 +1,37 @@
 /* Kernel for waveform extraction */
-#pragma OPENCL EXTENSION cl_khr_fp64: enable
 
-__kernel void waveextract(
-	__global const unsigned short* restrict buffer,
-	int npixels,
-	int nsamples,
-	int ws,
-	__global unsigned short* restrict maxres,
-	__global unsigned short* restrict timeres)
-{
+void waveExtract(__global const unsigned short* inBuf,
+                 __global unsigned short* maxBuf,
+                 __global unsigned short* timeBuf,
+                 unsigned int nPixels,
+                 unsigned int nSamples,
+                 unsigned int windowSize) {
+
     int gid = get_global_id(0);
-	unsigned int idx = gid*nsamples;
+    int pixelOff = gid*nSamples;
 
-    // copy samples into private memory
-    unsigned short samples[100];
-    for(unsigned int i=0; i<nsamples; i++) {
-        samples[i] = buffer[idx+i];
+    unsigned short sumn = 0;
+    unsigned short sum = 1;
+
+    for(unsigned int winIdx=0; winIdx<windowSize; winIdx++) {
+        sum += inBuf[pixelOff + winIdx];
+        sumn += inBuf[pixelOff + winIdx] * winIdx;
     }
 
-	long sumn = 0;
-	long sumd = 1;
+    unsigned short maxv = sum;
+    unsigned short maxt = sumn / (float)sum;
 
-	for(unsigned int j=0; j<ws; j++) {
-		sumn += samples[j] * j;
-		sumd += samples[j];
-	}
+    for(unsigned int sampleIdx=1; sampleIdx<nSamples-windowSize; sampleIdx++) {
+        unsigned int prev = sampleIdx-1;
+        unsigned int succ = sampleIdx+windowSize-1;
+        sum = sum - inBuf[pixelOff+prev] + inBuf[pixelOff+succ];
+        sumn = sumn - inBuf[pixelOff+prev] * prev + inBuf[pixelOff+succ] * succ;
+        if(sum > maxv) {
+            maxv = sum;
+            maxt = (sumn / (float)sum);
+        }
+    }
 
-	unsigned short max = sumd;
-	double t = (double)sumn / (double)sumd;
-
-	double maxt = t;
-
-	for(unsigned int j=1; j<nsamples-ws; j++) {
-	    unsigned int prev = j-1;
-	    unsigned int succ = j+ws-1;
-		sumn = sumn - samples[prev] * prev + samples[succ] * succ;
-		sumd = sumd - samples[prev] + samples[succ];
-
-		if(sumd > max) {
-			max = sumd;
-			t = (double) sumn / (double)sumd;
-			maxt = t;
-		}
-	}
-
-	maxres[gid] = max;
-	timeres[gid] = maxt;
+    maxBuf[gid] = maxv;
+    timeBuf[gid] = maxt;
 }
