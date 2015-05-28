@@ -18,24 +18,23 @@ using std::chrono::duration;
 using std::chrono::system_clock;
 
 void waveExtract(unsigned short* inBuf, unsigned short* maxBuf,
-                 unsigned short* timeBuf, unsigned int nPixels,
+                 float* timeBuf, unsigned int nPixels,
                  unsigned int nSamples, unsigned int windowSize) {
 
-//  alternative to main pragma/critical sections
-//    #pragma omp parallel for default(none) firstprivate(inBuf, maxBuf, timeBuf, nPixels, nSamples, windowSize)
+    //#pragma omp parallel for default(shared)
     for(unsigned int pixelIdx=0; pixelIdx<nPixels; pixelIdx++) {
         unsigned int pixelOff = pixelIdx * nSamples;
 
         unsigned short sumn = 0;
         unsigned short sum = 1;
 
-        for(unsigned int winIdx=0; winIdx<windowSize; winIdx++) {
-            sum += inBuf[pixelOff + winIdx];
-            sumn += inBuf[pixelOff + winIdx] * winIdx;
+        for(unsigned int sliceIdx=0; sliceIdx<windowSize; sliceIdx++) {
+            sum += inBuf[pixelOff + sliceIdx];
+            sumn += inBuf[pixelOff + sliceIdx] * sliceIdx;
         }
 
         unsigned short maxv = sum;
-        unsigned short maxt = sumn / (float)sum;
+        float maxt = sumn / (float)sum;
 
         for(unsigned int sampleIdx=1; sampleIdx<nSamples-windowSize; sampleIdx++) {
             unsigned int prev = sampleIdx-1;
@@ -50,6 +49,74 @@ void waveExtract(unsigned short* inBuf, unsigned short* maxBuf,
 
         maxBuf[pixelIdx] = maxv;
         timeBuf[pixelIdx] = maxt;
+    }
+}
+
+void waveExtract2(unsigned short* inBuf, unsigned short* maxBuf,
+                  float* timeBuf, unsigned int nPixels,
+                  unsigned int nSamples, unsigned int windowSize) {
+
+    unsigned short sum[3000][80];
+
+    //#pragma omp parallel for default(shared)
+    for(unsigned int pixelIdx=0; pixelIdx<nPixels; pixelIdx++) {
+        unsigned int pixelOff = pixelIdx * nSamples;
+
+        sum[pixelIdx][0] = 0;
+        for(unsigned int sliceIdx=0; sliceIdx<windowSize; sliceIdx++) {
+            sum[pixelIdx][0] += inBuf[pixelOff + sliceIdx];
+        }
+#ifndef OMP
+#ifdef DEBUG
+        std::cout << "sum[" <<pixelIdx << "][0]: " << sum[pixelIdx][0] << std::endl;
+#endif
+#endif
+        for(unsigned int sliceIdx=1; sliceIdx<nSamples-windowSize; sliceIdx++) {
+            unsigned int prev = sliceIdx-1;
+            unsigned int succ = sliceIdx+windowSize-1;
+            sum[pixelIdx][sliceIdx] = sum[pixelIdx][prev] - inBuf[pixelOff+prev] + inBuf[pixelOff+succ];
+#ifndef OMP
+#ifdef DEBUG
+            std::cout << "sum[" << pixelIdx << "][" << sliceIdx << "]: " << sum[pixelIdx][sliceIdx] << std::endl;
+#endif
+#endif
+        }
+    }
+
+    //#pragma omp parallel for default(shared)
+    for(unsigned int pixelIdx=0; pixelIdx<nPixels; pixelIdx++) {
+        unsigned int pixelOff = pixelIdx * nSamples;
+
+        unsigned short maxSum = 0;
+        unsigned int maxSliceIdx = 0;
+        for(unsigned int sliceIdx=0; sliceIdx<nSamples-windowSize; sliceIdx++) {
+            unsigned short s = sum[pixelIdx][sliceIdx];
+            if(s > maxSum) {
+                maxSum = s;
+                maxSliceIdx = sliceIdx;
+            }
+        }
+        float maxT = 0;
+        for(unsigned int i=maxSliceIdx; i<maxSliceIdx+windowSize-1; i++) {
+            maxT += inBuf[pixelOff+i] * i;
+        }
+
+        maxT /= maxSum;
+
+        maxBuf[pixelIdx] = maxSum;
+        timeBuf[pixelIdx] = maxT;
+
+#ifndef OMP
+#ifdef DEBUG
+        std::cout << "pixel: " << pixelIdx << " samples: ";
+        for(int sampleIdx=0; sampleIdx<nSamples; sampleIdx++) {
+            std::cout << inBuf[pixelOff + sampleIdx] << " ";
+        }
+        std::cout << std::endl;
+        std::cout << "slice n " << maxSliceIdx << std::endl;
+        std::cout << "max: " << " " << maxBuf[pixelIdx] << " time: " << timeBuf[pixelIdx] << std::endl;
+#endif
+#endif
     }
 }
 
@@ -74,7 +141,7 @@ int main(int argc, char *argv[]) {
 
     const unsigned int MAX_NPIXELS = 3000;
     unsigned short maxBuf[MAX_NPIXELS];
-    unsigned short timeBuf[MAX_NPIXELS];
+    float timeBuf[MAX_NPIXELS];
 
     time_point<system_clock> start = system_clock::now();
     time_point<system_clock> startPacket, endPacket;
@@ -83,7 +150,7 @@ int main(int argc, char *argv[]) {
 
     unsigned long byteCounter = 0;
     #pragma omp parallel for default(none) firstprivate(maxBuf, timeBuf, startPacket, endPacket, startExtract, endExtract) shared(elapsedPacket, elapsedExtract, byteCounter, ps, array_conf, events)
-    for(unsigned long eventCounter=0; eventCounter<numEvents; eventCounter++) { 
+    for(unsigned long eventCounter=0; eventCounter<numEvents; eventCounter++) {
 
         // Get event data
         PacketLib::byte* buff;
@@ -120,7 +187,7 @@ int main(int argc, char *argv[]) {
         }
 
         // Compute waveform extraction
-        waveExtract((unsigned short*)buff, maxBuf, timeBuf, npixels, nsamples, windowSize);
+        waveExtract2((unsigned short*)buff, maxBuf, timeBuf, npixels, nsamples, windowSize);
 
 
         #pragma omp critical
@@ -129,19 +196,6 @@ int main(int argc, char *argv[]) {
             elapsedExtract += endExtract - startExtract;
         }
 
-#ifdef DEBUG
-        std::cout << "npixels: " << npixels << std::endl;
-        std::cout << "nsamples: " << nsamples << std::endl;
-        for(int pixelIdx = 0; pixelIdx<npixels; pixelIdx++) {
-            PacketLib::word* s = (PacketLib::word*) buff + pixelIdx * nsamples;
-            std::cout << "pixel: " << pixelIdx << " samples: ";
-            for(int sampleIdx=0; sampleIdx<nsamples; sampleIdx++) {
-                std::cout << s[sampleIdx] << " ";
-            }
-            std::cout << std::endl;
-            std::cout << "result: " << " " << maxBuf[pixelIdx] << " " << timeBuf[pixelIdx] << " " << std::endl;
-        }
-#endif
         #pragma omp atomic
         byteCounter += buffSize;
     }
