@@ -11,7 +11,7 @@
 #define __CL_ENABLE_EXCEPTIONS
 #include <CL/cl.hpp>
 
-#define DEBUG 1
+//#define DEBUG 1
 
 using std::chrono::time_point;
 using std::chrono::duration;
@@ -158,16 +158,15 @@ int main(int argc, char *argv[]) {
     cl::CommandQueue queue(context, devices[devicenum], CL_QUEUE_PROFILING_ENABLE, NULL);
 
     // allocate buffers
-    const int MAX_NPIXELS = 3000;
-    const int MAX_NSAMPLES = 100;
-    unsigned short maxBuf[MAX_NPIXELS];
-    unsigned short timeBuf[MAX_NPIXELS];
-    cl::Buffer inDevBuf(context, CL_MEM_READ_ONLY | CL_MEM_ALLOC_HOST_PTR, MAX_NPIXELS*MAX_NSAMPLES*sizeof(unsigned short), NULL, NULL);
-    cl::Buffer maxDevBuf(context, CL_MEM_WRITE_ONLY | CL_MEM_ALLOC_HOST_PTR, MAX_NPIXELS*sizeof(unsigned short), NULL, NULL);
-    cl::Buffer timeDevBuf(context, CL_MEM_WRITE_ONLY | CL_MEM_ALLOC_HOST_PTR, MAX_NPIXELS*sizeof(unsigned short), NULL, NULL);
-    PacketLib::byte* inData = (PacketLib::byte*) queue.enqueueMapBuffer(inDevBuf, CL_TRUE, CL_MAP_WRITE, 0, MAX_NPIXELS*MAX_NSAMPLES);
-    unsigned short* maxData = (unsigned short*) queue.enqueueMapBuffer(maxDevBuf, CL_TRUE, CL_MAP_READ, 0, MAX_NPIXELS);
-    unsigned short* timeData = (unsigned short*) queue.enqueueMapBuffer(timeDevBuf, CL_TRUE, CL_MAP_READ, 0, MAX_NPIXELS);
+    const unsigned int MAX_NPIXELS = 3000;
+    const unsigned int MAX_NSAMPLES = 100;
+    const unsigned int MAX_EVENT_SIZE = MAX_NPIXELS * MAX_NSAMPLES * sizeof(unsigned short);
+    cl::Buffer inDevBuf(context, CL_MEM_READ_ONLY | CL_MEM_ALLOC_HOST_PTR, MAX_EVENT_SIZE, NULL, NULL);
+    cl::Buffer maxDevBuf(context, CL_MEM_WRITE_ONLY | CL_MEM_ALLOC_HOST_PTR, MAX_NPIXELS*sizeof(unsigned int), NULL, NULL);
+    cl::Buffer timeDevBuf(context, CL_MEM_WRITE_ONLY | CL_MEM_ALLOC_HOST_PTR, MAX_NPIXELS*sizeof(float), NULL, NULL);
+    PacketLib::byte* inData = (PacketLib::byte*) queue.enqueueMapBuffer(inDevBuf, CL_FALSE, CL_MAP_WRITE, 0, MAX_EVENT_SIZE);
+    unsigned short* maxData = (unsigned short*) queue.enqueueMapBuffer(maxDevBuf, CL_FALSE, CL_MAP_READ, 0, MAX_NPIXELS*sizeof(unsigned int));
+    float* timeData = (float*) queue.enqueueMapBuffer(timeDevBuf, CL_TRUE, CL_MAP_READ, 0, MAX_NPIXELS*sizeof(float)); // double for floats
 
     time_point<system_clock> start = system_clock::now();
     time_point<system_clock> startPacket, endPacket;
@@ -207,7 +206,7 @@ int main(int argc, char *argv[]) {
         // copy to pinned memory
         memcpy(inData, buff, buffSize);
         // copy input buffer into pinned dev memory
-        queue.enqueueWriteBuffer(inDevBuf, CL_TRUE, 0, buffSize, inData, 0);
+        queue.enqueueWriteBuffer(inDevBuf, CL_FALSE, 0, buffSize, inData, 0);
         endCopyTo = std::chrono::system_clock::now();
         elapsedCopyTo += endCopyTo - startCopyTo;
 
@@ -227,8 +226,8 @@ int main(int argc, char *argv[]) {
 
         // copy pinned dev memory buffers to output
         startCopyFrom = std::chrono::system_clock::now();
-        queue.enqueueReadBuffer(maxDevBuf, CL_TRUE, 0, nPixels*sizeof(unsigned short), maxData, 0);
-        queue.enqueueReadBuffer(timeDevBuf, CL_TRUE, 0, nPixels*sizeof(unsigned short), timeData, 0);
+        queue.enqueueReadBuffer(maxDevBuf, CL_FALSE, 0, nPixels*sizeof(unsigned short), maxData);
+        queue.enqueueReadBuffer(timeDevBuf, CL_TRUE, 0, nPixels*sizeof(float), timeData);
         endCopyFrom = std::chrono::system_clock::now();
 
 #ifdef DEBUG
@@ -241,7 +240,7 @@ int main(int argc, char *argv[]) {
                 std::cout << s[sampleIdx] << " ";
             }
             std::cout << std::endl;
-            std::cout << "result: " << " " << maxBuf[pixelIdx] << " " << timeBuf[pixelIdx] << " " << std::endl;
+            std::cout << "result: " << " " << maxData[pixelIdx] << " " << timeData[pixelIdx] << " " << std::endl;
         }
 #endif
         byteCounter += buffSize;

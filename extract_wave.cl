@@ -2,7 +2,7 @@
 
 __kernel void waveExtract(__global const unsigned short* inBuf,
                           __global unsigned short* maxBuf,
-                          __global unsigned short* timeBuf,
+                          __global float* timeBuf,
                           unsigned int nPixels,
                           unsigned int nSamples,
                           unsigned int windowSize) {
@@ -19,7 +19,7 @@ __kernel void waveExtract(__global const unsigned short* inBuf,
     }
 
     unsigned short maxv = sum;
-    unsigned short maxt = sumn / (float)sum;
+    float maxt = sumn / (float)sum;
 
     for(unsigned int sampleIdx=1; sampleIdx<nSamples-windowSize; sampleIdx++) {
         unsigned int prev = sampleIdx-1;
