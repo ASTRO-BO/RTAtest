@@ -11,7 +11,7 @@
 #define __CL_ENABLE_EXCEPTIONS
 #include <CL/cl.hpp>
 
-//#define DEBUG 1
+#define DEBUG 1
 
 using std::chrono::time_point;
 using std::chrono::duration;
@@ -162,12 +162,12 @@ int main(int argc, char *argv[]) {
     const int MAX_NSAMPLES = 100;
     unsigned short maxBuf[MAX_NPIXELS];
     unsigned short timeBuf[MAX_NPIXELS];
-    cl::Buffer inDevBuf(context, CL_MEM_READ_ONLY, MAX_NPIXELS*MAX_NSAMPLES*sizeof(unsigned short), NULL, NULL);
-    cl::Buffer maxDevBuf(context, CL_MEM_WRITE_ONLY, MAX_NPIXELS*sizeof(unsigned short), NULL, NULL);
-    cl::Buffer timeDevBuf(context, CL_MEM_WRITE_ONLY, MAX_NPIXELS*sizeof(unsigned short), NULL, NULL);
-    PacketLib::byte* inMapBuf = (PacketLib::byte*) queue.enqueueMapBuffer(inDevBuf, CL_TRUE, CL_MAP_WRITE, 0, MAX_NPIXELS*MAX_NSAMPLES);
-    unsigned short* maxMapBuf = (unsigned short*) queue.enqueueMapBuffer(maxDevBuf, CL_TRUE, CL_MAP_READ, 0, MAX_NPIXELS);
-    unsigned short* timeMapBuf = (unsigned short*) queue.enqueueMapBuffer(timeDevBuf, CL_TRUE, CL_MAP_READ, 0, MAX_NPIXELS);
+    cl::Buffer inDevBuf(context, CL_MEM_READ_ONLY | CL_MEM_ALLOC_HOST_PTR, MAX_NPIXELS*MAX_NSAMPLES*sizeof(unsigned short), NULL, NULL);
+    cl::Buffer maxDevBuf(context, CL_MEM_WRITE_ONLY | CL_MEM_ALLOC_HOST_PTR, MAX_NPIXELS*sizeof(unsigned short), NULL, NULL);
+    cl::Buffer timeDevBuf(context, CL_MEM_WRITE_ONLY | CL_MEM_ALLOC_HOST_PTR, MAX_NPIXELS*sizeof(unsigned short), NULL, NULL);
+    PacketLib::byte* inData = (PacketLib::byte*) queue.enqueueMapBuffer(inDevBuf, CL_TRUE, CL_MAP_WRITE, 0, MAX_NPIXELS*MAX_NSAMPLES);
+    unsigned short* maxData = (unsigned short*) queue.enqueueMapBuffer(maxDevBuf, CL_TRUE, CL_MAP_READ, 0, MAX_NPIXELS);
+    unsigned short* timeData = (unsigned short*) queue.enqueueMapBuffer(timeDevBuf, CL_TRUE, CL_MAP_READ, 0, MAX_NPIXELS);
 
     time_point<system_clock> start = system_clock::now();
     time_point<system_clock> startPacket, endPacket;
@@ -191,8 +191,8 @@ int main(int argc, char *argv[]) {
             event->swapWord();
 #endif
         PacketLib::Packet *packet = ps.getPacket(event);
-        PacketLib::byte* inBuff = packet->getData()->getStream();
-        PacketLib::dword inBuffSize = packet->getData()->size();
+        PacketLib::byte* buff = packet->getData()->getStream();
+        PacketLib::dword buffSize = packet->getData()->size();
         PacketLib::DataFieldHeader* dfh = packet->getPacketDataFieldHeader();
         const unsigned int telescopeID = dfh->getFieldValue_16ui("TelescopeID");
         CTAConfig::CTAMDTelescopeType* teltype = array_conf.getTelescope(telescopeID)->getTelescopeType();
@@ -203,31 +203,32 @@ int main(int argc, char *argv[]) {
         endPacket = system_clock::now();
         elapsedPacket += endPacket - startPacket;
 
-        // copy input buffer into pinned dev memory
         startCopyTo = std::chrono::system_clock::now();
-        memcpy(inMapBuf, inBuff, inBuffSize);
+        // copy to pinned memory
+        memcpy(inData, buff, buffSize);
+        // copy input buffer into pinned dev memory
+        queue.enqueueWriteBuffer(inDevBuf, CL_TRUE, 0, buffSize, inData, 0);
         endCopyTo = std::chrono::system_clock::now();
         elapsedCopyTo += endCopyTo - startCopyTo;
 
         // compute waveform extraction
         startExtract = std::chrono::system_clock::now();
-        kernelExtract.setArg(0, inBuff);
-        kernelExtract.setArg(1, maxBuf);
-        kernelExtract.setArg(2, timeBuf);
+        kernelExtract.setArg(0, inDevBuf);
+        kernelExtract.setArg(1, maxDevBuf);
+        kernelExtract.setArg(2, timeDevBuf);
         kernelExtract.setArg(3, nPixels);
         kernelExtract.setArg(4, nSamples);
         kernelExtract.setArg(5, windowSize);
         cl::NDRange global(nPixels);
         cl::NDRange local(cl::NullRange);
         queue.enqueueNDRangeKernel(kernelExtract, cl::NullRange, global, local);
-        queue.finish();
         endExtract = system_clock::now();
         elapsedExtract += endExtract - startExtract;
 
         // copy pinned dev memory buffers to output
         startCopyFrom = std::chrono::system_clock::now();
-        memcpy(maxBuf, maxMapBuf, nPixels*sizeof(unsigned short));
-        memcpy(timeBuf, timeMapBuf, nPixels*sizeof(unsigned short));
+        queue.enqueueReadBuffer(maxDevBuf, CL_TRUE, 0, nPixels*sizeof(unsigned short), maxData, 0);
+        queue.enqueueReadBuffer(timeDevBuf, CL_TRUE, 0, nPixels*sizeof(unsigned short), timeData, 0);
         endCopyFrom = std::chrono::system_clock::now();
 
 #ifdef DEBUG
@@ -243,7 +244,7 @@ int main(int argc, char *argv[]) {
             std::cout << "result: " << " " << maxBuf[pixelIdx] << " " << timeBuf[pixelIdx] << " " << std::endl;
         }
 #endif
-        byteCounter += inBuffSize;
+        byteCounter += buffSize;
     }
 
     time_point<system_clock> end = system_clock::now();

@@ -1,11 +1,11 @@
 /* Kernel for waveform extraction */
 
-void waveExtract(__global const unsigned short* inBuf,
-                 __global unsigned short* maxBuf,
-                 __global unsigned short* timeBuf,
-                 unsigned int nPixels,
-                 unsigned int nSamples,
-                 unsigned int windowSize) {
+__kernel void waveExtract(__global const unsigned short* inBuf,
+                          __global unsigned short* maxBuf,
+                          __global unsigned short* timeBuf,
+                          unsigned int nPixels,
+                          unsigned int nSamples,
+                          unsigned int windowSize) {
 
     int gid = get_global_id(0);
     int pixelOff = gid*nSamples;
