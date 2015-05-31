@@ -11,7 +11,7 @@ __kernel void waveExtract(__global const unsigned short* inBuf,
     int pixelOff = gid*nSamples;
 
     unsigned short sumn = 0;
-    unsigned short sum = 1;
+    unsigned short sum = 0;
 
     for(unsigned int winIdx=0; winIdx<windowSize; winIdx++) {
         sum += inBuf[pixelOff + winIdx];
