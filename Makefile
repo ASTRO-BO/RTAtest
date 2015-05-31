@@ -1,4 +1,4 @@
-all: pthreads mt pwave_serial pwave_omp pwave_cl
+all: pthreads mt pwave_serial pwave_omp pwave_cl pwave_cl_reduction
 
 SYSTEM= $(shell gcc -dumpmachine)
 ifneq (, $(findstring linux, $(SYSTEM)))
@@ -20,6 +20,9 @@ pwave_omp: pwave_serial.cpp
 
 pwave_cl: pwave_cl.cpp
 	$(CXX) -O3 -g -std=c++11 -I. $(CXXFLAGS) pwave_cl.cpp -o pwave_cl -lpacket -lcfitsio -lCTAConfig -lCTAUtils -pthread $(OCL_LIBS)
+
+pwave_cl_reduction: pwave_cl_reduction.cpp
+	$(CXX) -O3 -g -std=c++11 -I. $(CXXFLAGS) pwave_cl_reduction.cpp -o pwave_cl_reduction -lpacket -lcfitsio -lCTAConfig -lCTAUtils -pthread $(OCL_LIBS)
 
 mt: mt.cpp
 	$(CXX) $(CXXFLAGS) mt.cpp -o mt -lz -lpacket -pthread -lCTAUtils $(PTHREAD_LIBS)
