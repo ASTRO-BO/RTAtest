@@ -97,7 +97,7 @@ void waveExtract2(unsigned short* inBuf, unsigned short* maxBuf,
             }
         }
         float maxT = 0;
-        for(unsigned int i=maxSliceIdx; i<maxSliceIdx+windowSize-1; i++) {
+        for(unsigned int i=maxSliceIdx; i<maxSliceIdx+windowSize; i++) {
             maxT += inBuf[pixelOff+i] * i;
         }
 
