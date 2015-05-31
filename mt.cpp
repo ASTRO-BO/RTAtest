@@ -61,7 +61,7 @@ std::vector<DataBufferElement> createBuffer(PacketBufferV* buff)
 	int nsamp_idx = 0;
 	std::vector<DataBufferElement> outBuff;
 	try {
-		Packet *p = ps->getPacketType("triggered_telescope1_30GEN");
+		Packet *p = ps->getPacketType("triggered_telescope1_30Proto1");
 		npix_idx = p->getPacketSourceDataField()->getFieldIndex("Number of pixels");
 		nsamp_idx = p->getPacketSourceDataField()->getFieldIndex("Number of samples");
 	} catch (PacketException* e)
@@ -237,7 +237,7 @@ void* extractWavePacket(void* buffin)
 	pthread_mutex_lock(&lockp);
 	try {
 		ps = new PacketStream(configFileName.c_str());
-		Packet *p = ps->getPacketType("triggered_telescope1_30GEN");
+		Packet *p = ps->getPacketType("triggered_telescope1_30Proto1");
 		npix_idx = p->getPacketSourceDataField()->getFieldIndex("Number of pixels");
 		nsamp_idx = p->getPacketSourceDataField()->getFieldIndex("Number of samples");
 	} catch (PacketException* e)
@@ -364,7 +364,7 @@ void* decodePacket(void* buffin)
 	pthread_mutex_lock(&lockp);
 	try {
 		ps = new PacketStream(configFileName.c_str());
-		Packet *p = ps->getPacketType("triggered_telescope1_30GEN");
+		Packet *p = ps->getPacketType("triggered_telescope1_30Proto1");
 		npix_idx = p->getPacketSourceDataField()->getFieldIndex("Number of pixels");
 		nsamp_idx = p->getPacketSourceDataField()->getFieldIndex("Number of samples");
 	} catch (PacketException* e)
