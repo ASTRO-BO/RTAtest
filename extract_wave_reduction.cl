@@ -39,7 +39,8 @@ __kernel void sum(__global const unsigned short* inBuf,
     }
     sumBuf[gid] = sum;
 
-//    printf("%d ", sum);
+//    if(gid == 40 || gid == 41)
+//        printf("gid %d: sum: %d\n", gid, sum);
 }
 
 /* reduction opencl call it recusively
@@ -60,21 +61,18 @@ __kernel void maximum(__global unsigned short* sumBuf,
     unsigned int gid = get_global_id(0);
     unsigned int sample = gid % nSamples;
 
-    if(gid % n != 0)
+    if(sample % n != 0)
         return;
-
-//    if(sample > nSamples-windowSize)
-//        return;
 
     if(sample+n > nSamples-windowSize)
         return;
 
-    if(gid < 40) printf("gid=%d - nsamples=%d - n=%d - sample=%d - %d %d", gid, nSamples, n, sample, sumBuf[gid], sumBuf[gid+n]);
+//    if(gid < 80 && gid >= 40) printf("gid=%d - nsamples=%d - n=%d - sample=%d - %d %d", gid, nSamples, n, sample, sumBuf[gid], sumBuf[gid+n]);
     unsigned short lvalue = sumBuf[gid];
     unsigned short rvalue = sumBuf[gid+n];
     if(rvalue > lvalue)
         sumBuf[gid] = rvalue;
 
-    if(gid < 40) printf("-> %d\n", sumBuf[gid]);
+//    if(gid < 80 && gid >= 40) printf("-> %d\n", sumBuf[gid]);
 
 }

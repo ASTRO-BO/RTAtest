@@ -161,7 +161,7 @@ int main(int argc, char *argv[]) {
     const unsigned int MAX_NSAMPLES = 100;
     const unsigned int MAX_EVENT_SIZE = MAX_NPIXELS * MAX_NSAMPLES * sizeof(unsigned short);
     cl::Buffer inDevBuf(context, CL_MEM_READ_ONLY | CL_MEM_ALLOC_HOST_PTR, MAX_EVENT_SIZE, NULL, NULL);
-    cl::Buffer sumDevBuf(context, CL_MEM_WRITE_ONLY | CL_MEM_ALLOC_HOST_PTR, MAX_EVENT_SIZE, NULL, NULL);
+    cl::Buffer sumDevBuf(context, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR, MAX_EVENT_SIZE, NULL, NULL);
     unsigned short* inData = (unsigned short*) queue.enqueueMapBuffer(inDevBuf, CL_FALSE, CL_MAP_WRITE, 0, MAX_EVENT_SIZE);
     unsigned short* sumData = (unsigned short*) queue.enqueueMapBuffer(sumDevBuf, CL_FALSE, CL_MAP_READ, 0, MAX_EVENT_SIZE);
 
@@ -215,7 +215,7 @@ int main(int argc, char *argv[]) {
         cl::NDRange global(nPixels*nSamples);
         cl::NDRange local(cl::NullRange);
         queue.enqueueNDRangeKernel(kernelSum, cl::NullRange, global, local);
-        for(unsigned int n=2; n<nSamples; n = n<<1) {
+        for(unsigned int n=1; n<nSamples; n = n<<1) {
             kernelMaximum.setArg(0, sumDevBuf);
             kernelMaximum.setArg(1, nSamples);
             kernelMaximum.setArg(2, n);
@@ -239,7 +239,7 @@ int main(int argc, char *argv[]) {
                 std::cout << s[sampleIdx] << " ";
             }
             std::cout << std::endl;
-            std::cout << "result: " << " " << sumData[pixelIdx] << std::endl;
+            std::cout << "result: " << " " << sumData[pixelIdx*nSamples] << std::endl;
         }
 #endif
         byteCounter += buffSize;
