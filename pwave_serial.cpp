@@ -7,6 +7,7 @@
 #include <chrono>
 #include <ctime>
 #include <cstdlib>
+#include <iomanip>
 #ifdef OMP
 #include <omp.h>
 #endif
@@ -66,20 +67,10 @@ void waveExtract2(unsigned short* inBuf, unsigned short* maxBuf,
         for(unsigned int sliceIdx=0; sliceIdx<windowSize; sliceIdx++) {
             sum[pixelIdx][0] += inBuf[pixelOff + sliceIdx];
         }
-#ifndef OMP
-#ifdef DEBUG
-        std::cout << "sum[" <<pixelIdx << "][0]: " << sum[pixelIdx][0] << std::endl;
-#endif
-#endif
         for(unsigned int sliceIdx=1; sliceIdx<nSamples-windowSize; sliceIdx++) {
             unsigned int prev = sliceIdx-1;
             unsigned int succ = sliceIdx+windowSize-1;
             sum[pixelIdx][sliceIdx] = sum[pixelIdx][prev] - inBuf[pixelOff+prev] + inBuf[pixelOff+succ];
-#ifndef OMP
-#ifdef DEBUG
-            std::cout << "sum[" << pixelIdx << "][" << sliceIdx << "]: " << sum[pixelIdx][sliceIdx] << std::endl;
-#endif
-#endif
         }
     }
 
@@ -113,7 +104,6 @@ void waveExtract2(unsigned short* inBuf, unsigned short* maxBuf,
             std::cout << inBuf[pixelOff + sampleIdx] << " ";
         }
         std::cout << std::endl;
-        std::cout << "slice n " << maxSliceIdx << std::endl;
         std::cout << "max: " << " " << maxBuf[pixelIdx] << " time: " << timeBuf[pixelIdx] << std::endl;
 #endif
 #endif
@@ -206,13 +196,13 @@ int main(int argc, char *argv[]) {
     double throughputE = numEvents / elapsed.count();
     double throughputB = byteCounter / elapsed.count() / 1000000;
     std::cout << numEvents << " events" << std::endl;
-    std::cout << "Elapsed packet " << elapsedPacket.count() << std::endl;
+    std::cout << "Elapsed packet  " << std::setprecision(2) << std::fixed << elapsedPacket.count() << std::endl;
 #ifndef OMP
-    std::cout << "Elapsed extract " << elapsedExtract.count() << std::endl;
+    std::cout << "Elapsed extract " << std::setprecision(2) << std::fixed << elapsedExtract.count() << std::endl;
 #else
-    std::cout << "Elapsed extract " << elapsedExtract.count() / omp_get_max_threads() << std::endl;
+    std::cout << "Elapsed extract " << std::setprecision(2) << std::fixed << elapsedExtract.count() / omp_get_max_threads() << std::endl;
 #endif
-    std::cout << "Elapsed total " << elapsed.count() << std::endl;
+    std::cout << "Elapsed total " << std::setprecision(2) << std::fixed << elapsed.count() << std::endl;
     std::cout << "throughput: " << throughputE << " events/s - " << throughputB << " MB/s" << std::endl;
 
     return EXIT_SUCCESS;

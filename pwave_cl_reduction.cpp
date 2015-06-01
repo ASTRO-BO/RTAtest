@@ -7,6 +7,7 @@
 #include <chrono>
 #include <ctime>
 #include <cstdlib>
+#include <iomanip>
 
 #define __CL_ENABLE_EXCEPTIONS
 #include <CL/cl.hpp>
@@ -203,7 +204,7 @@ int main(int argc, char *argv[]) {
         // copy to pinned memory
         memcpy(inData, buff, buffSize);
         // copy input buffer into pinned dev memory
-        queue.enqueueWriteBuffer(inDevBuf, CL_FALSE, 0, buffSize, inData);
+        queue.enqueueWriteBuffer(inDevBuf, CL_TRUE, 0, buffSize, inData);
         endCopyTo = std::chrono::system_clock::now();
         elapsedCopyTo += endCopyTo - startCopyTo;
 
@@ -221,6 +222,7 @@ int main(int argc, char *argv[]) {
             kernelMaximum.setArg(2, n);
             queue.enqueueNDRangeKernel(kernelMaximum, cl::NullRange, global, local);
         }
+        queue.finish();
         endExtract = system_clock::now();
         elapsedExtract += endExtract - startExtract;
 
@@ -228,6 +230,7 @@ int main(int argc, char *argv[]) {
         startCopyFrom = std::chrono::system_clock::now();
         queue.enqueueReadBuffer(sumDevBuf, CL_TRUE, 0, sizeof(unsigned short), sumData);
         endCopyFrom = std::chrono::system_clock::now();
+        elapsedCopyFrom += endCopyFrom - startCopyFrom;
 
 #ifdef DEBUG
         std::cout << "npixels: " << nPixels << std::endl;
@@ -251,11 +254,11 @@ int main(int argc, char *argv[]) {
     double throughputE = numEvents / elapsed.count();
     double throughputB = byteCounter / elapsed.count() / 1000000;
     std::cout << numEvents << " events" << std::endl;
-    std::cout << "Elapsed packet " << elapsedPacket.count() << std::endl;
-    std::cout << "Elapsed copy to " << elapsedCopyTo.count() << std::endl;
-    std::cout << "Elapsed extract " << elapsedExtract.count() << std::endl;
-    std::cout << "Elapsed copy from " << elapsedCopyFrom.count() << std::endl;
-    std::cout << "Elapsed total " << elapsed.count() << std::endl;
+    std::cout << "Elapsed packet    " << std::setprecision(2) << std::fixed << elapsedPacket.count() << std::endl;
+    std::cout << "Elapsed copy to   " << std::setprecision(2) << std::fixed << elapsedCopyTo.count() << std::endl;
+    std::cout << "Elapsed extract   " << std::setprecision(2) << std::fixed << elapsedExtract.count() << std::endl;
+    std::cout << "Elapsed copy from " << std::setprecision(2) << std::fixed << elapsedCopyFrom.count() << std::endl;
+    std::cout << "Elapsed total     " << std::setprecision(2) << std::fixed << elapsed.count() << std::endl;
     std::cout << "throughput: " << throughputE << " events/s - " << throughputB << " MB/s" << std::endl;
 
     return EXIT_SUCCESS;
