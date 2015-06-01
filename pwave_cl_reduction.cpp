@@ -13,6 +13,7 @@
 #include <CL/cl.hpp>
 
 //#define DEBUG 1
+//#define TIMERS 1
 
 using std::chrono::time_point;
 using std::chrono::duration;
@@ -167,18 +168,22 @@ int main(int argc, char *argv[]) {
     unsigned short* sumData = (unsigned short*) queue.enqueueMapBuffer(sumDevBuf, CL_FALSE, CL_MAP_READ, 0, MAX_EVENT_SIZE);
 
     time_point<system_clock> start = system_clock::now();
+#ifdef TIMERS
     time_point<system_clock> startPacket, endPacket;
     time_point<system_clock> startCopyTo, endCopyTo;
     time_point<system_clock> startExtract, endExtract;
     time_point<system_clock> startCopyFrom, endCopyFrom;
     duration<double> elapsedPacket(0.0), elapsedExtract(0.0);
     duration<double> elapsedCopyTo(0.0), elapsedCopyFrom(0.0);
+#endif
 
     unsigned long byteCounter = 0;
     for(unsigned long eventCounter=0; eventCounter<numEvents; eventCounter++) {
 
         // get event data
+#ifdef TIMERS
         startPacket = system_clock::now();
+#endif
         PacketLib::ByteStreamPtr event = events.getNext();
 #ifdef ARCH_BIGENDIAN
         if(!event->isBigendian())
@@ -197,19 +202,26 @@ int main(int argc, char *argv[]) {
         unsigned int nPixels = teltype->getCameraType()->getNpixels();
         unsigned int nSamples = teltype->getCameraType()->getPixel(0)->getPixelType()->getNSamples();
         const unsigned int windowSize = 6;
+
+#ifdef TIMERS
         endPacket = system_clock::now();
         elapsedPacket += endPacket - startPacket;
-
         startCopyTo = std::chrono::system_clock::now();
+#endif
+
         // copy to pinned memory
         memcpy(inData, buff, buffSize);
         // copy input buffer into pinned dev memory
+#ifdef TIMERS
         queue.enqueueWriteBuffer(inDevBuf, CL_TRUE, 0, buffSize, inData);
         endCopyTo = std::chrono::system_clock::now();
         elapsedCopyTo += endCopyTo - startCopyTo;
+        startExtract = std::chrono::system_clock::now();
+#else
+        queue.enqueueWriteBuffer(inDevBuf, CL_FALSE, 0, buffSize, inData);
+#endif
 
         // compute waveform extraction
-        startExtract = std::chrono::system_clock::now();
         kernelSum.setArg(0, inDevBuf);
         kernelSum.setArg(1, sumDevBuf);
         kernelSum.setArg(2, nSamples);
@@ -222,15 +234,20 @@ int main(int argc, char *argv[]) {
             kernelMaximum.setArg(2, n);
             queue.enqueueNDRangeKernel(kernelMaximum, cl::NullRange, global, local);
         }
+#ifdef TIMERS
         queue.finish();
         endExtract = system_clock::now();
         elapsedExtract += endExtract - startExtract;
+        startCopyFrom = std::chrono::system_clock::now();
+#endif
 
         // copy pinned dev memory buffers to output
-        startCopyFrom = std::chrono::system_clock::now();
         queue.enqueueReadBuffer(sumDevBuf, CL_TRUE, 0, sizeof(unsigned short), sumData);
+
+#ifdef TIMERS
         endCopyFrom = std::chrono::system_clock::now();
         elapsedCopyFrom += endCopyFrom - startCopyFrom;
+#endif
 
 #ifdef DEBUG
         std::cout << "npixels: " << nPixels << std::endl;
@@ -254,10 +271,12 @@ int main(int argc, char *argv[]) {
     double throughputE = numEvents / elapsed.count();
     double throughputB = byteCounter / elapsed.count() / 1000000;
     std::cout << numEvents << " events" << std::endl;
+#ifdef TIMERS
     std::cout << "Elapsed packet    " << std::setprecision(2) << std::fixed << elapsedPacket.count() << std::endl;
     std::cout << "Elapsed copy to   " << std::setprecision(2) << std::fixed << elapsedCopyTo.count() << std::endl;
     std::cout << "Elapsed extract   " << std::setprecision(2) << std::fixed << elapsedExtract.count() << std::endl;
     std::cout << "Elapsed copy from " << std::setprecision(2) << std::fixed << elapsedCopyFrom.count() << std::endl;
+#endif
     std::cout << "Elapsed total     " << std::setprecision(2) << std::fixed << elapsed.count() << std::endl;
     std::cout << "throughput: " << throughputE << " events/s - " << throughputB << " MB/s" << std::endl;
 

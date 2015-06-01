@@ -13,6 +13,7 @@
 #endif
 
 //#define DEBUG 1
+//#define TIMERS 1
 
 using std::chrono::time_point;
 using std::chrono::duration;
@@ -134,12 +135,18 @@ int main(int argc, char *argv[]) {
     float timeBuf[MAX_NPIXELS];
 
     time_point<system_clock> start = system_clock::now();
+#ifdef TIMERS
     time_point<system_clock> startPacket, endPacket;
     time_point<system_clock> startExtract, endExtract;
     duration<double> elapsedPacket(0.0), elapsedExtract(0.0);
+#endif
 
     unsigned long byteCounter = 0;
+#ifdef TIMERS
     #pragma omp parallel for default(none) firstprivate(maxBuf, timeBuf, startPacket, endPacket, startExtract, endExtract) shared(elapsedPacket, elapsedExtract, byteCounter, ps, array_conf, events)
+#else
+    #pragma omp parallel for default(none) firstprivate(maxBuf, timeBuf) shared(byteCounter, ps, array_conf, events)
+#endif
     for(unsigned long eventCounter=0; eventCounter<numEvents; eventCounter++) {
 
         // Get event data
@@ -150,7 +157,9 @@ int main(int argc, char *argv[]) {
         const unsigned int windowSize = 6;
         #pragma omp critical
         {
+#ifdef TIMERS
             startPacket = system_clock::now();
+#endif
 
             PacketLib::ByteStreamPtr event = events.getNext();
 
@@ -171,20 +180,24 @@ int main(int argc, char *argv[]) {
             npixels = teltype->getCameraType()->getNpixels();
             nsamples = teltype->getCameraType()->getPixel(0)->getPixelType()->getNSamples();
 
+#ifdef TIMERS
             endPacket = system_clock::now();
             elapsedPacket += endPacket - startPacket;
             startExtract = system_clock::now();
+#endif
         }
 
         // Compute waveform extraction
         waveExtract2((unsigned short*)buff, maxBuf, timeBuf, npixels, nsamples, windowSize);
 
 
+#ifdef TIMERS
         #pragma omp critical
         {
             endExtract = system_clock::now();
             elapsedExtract += endExtract - startExtract;
         }
+#endif
 
         #pragma omp atomic
         byteCounter += buffSize;
@@ -196,11 +209,13 @@ int main(int argc, char *argv[]) {
     double throughputE = numEvents / elapsed.count();
     double throughputB = byteCounter / elapsed.count() / 1000000;
     std::cout << numEvents << " events" << std::endl;
+#ifdef TIMERS
     std::cout << "Elapsed packet  " << std::setprecision(2) << std::fixed << elapsedPacket.count() << std::endl;
 #ifndef OMP
     std::cout << "Elapsed extract " << std::setprecision(2) << std::fixed << elapsedExtract.count() << std::endl;
 #else
     std::cout << "Elapsed extract " << std::setprecision(2) << std::fixed << elapsedExtract.count() / omp_get_max_threads() << std::endl;
+#endif
 #endif
     std::cout << "Elapsed total " << std::setprecision(2) << std::fixed << elapsed.count() << std::endl;
     std::cout << "throughput: " << throughputE << " events/s - " << throughputB << " MB/s" << std::endl;
