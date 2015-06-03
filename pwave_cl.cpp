@@ -160,15 +160,16 @@ int main(int argc, char *argv[]) {
     cl::CommandQueue queue(context, devices[devicenum], CL_QUEUE_PROFILING_ENABLE, NULL);
 
     // allocate buffers
+    const unsigned int N = 1;
     const unsigned int MAX_NPIXELS = 3000;
     const unsigned int MAX_NSAMPLES = 100;
-    const unsigned int MAX_EVENT_SIZE = MAX_NPIXELS * MAX_NSAMPLES * sizeof(unsigned short);
+    const unsigned int MAX_EVENT_SIZE = MAX_NPIXELS * MAX_NSAMPLES * sizeof(unsigned short) * N;
     cl::Buffer inDevBuf(context, CL_MEM_READ_ONLY | CL_MEM_ALLOC_HOST_PTR, MAX_EVENT_SIZE, NULL, NULL);
-    cl::Buffer maxDevBuf(context, CL_MEM_WRITE_ONLY | CL_MEM_ALLOC_HOST_PTR, MAX_NPIXELS*sizeof(unsigned int), NULL, NULL);
-    cl::Buffer timeDevBuf(context, CL_MEM_WRITE_ONLY | CL_MEM_ALLOC_HOST_PTR, MAX_NPIXELS*sizeof(float), NULL, NULL);
+    cl::Buffer maxDevBuf(context, CL_MEM_WRITE_ONLY | CL_MEM_ALLOC_HOST_PTR, MAX_NPIXELS*sizeof(unsigned int)*N, NULL, NULL);
+    cl::Buffer timeDevBuf(context, CL_MEM_WRITE_ONLY | CL_MEM_ALLOC_HOST_PTR, MAX_NPIXELS*sizeof(float)*N, NULL, NULL);
     PacketLib::byte* inData = (PacketLib::byte*) queue.enqueueMapBuffer(inDevBuf, CL_FALSE, CL_MAP_WRITE, 0, MAX_EVENT_SIZE);
-    unsigned short* maxData = (unsigned short*) queue.enqueueMapBuffer(maxDevBuf, CL_FALSE, CL_MAP_READ, 0, MAX_NPIXELS*sizeof(unsigned int));
-    float* timeData = (float*) queue.enqueueMapBuffer(timeDevBuf, CL_TRUE, CL_MAP_READ, 0, MAX_NPIXELS*sizeof(float)); // double for floats
+    unsigned short* maxData = (unsigned short*) queue.enqueueMapBuffer(maxDevBuf, CL_FALSE, CL_MAP_READ, 0, MAX_NPIXELS*sizeof(unsigned int)*N);
+    float* timeData = (float*) queue.enqueueMapBuffer(timeDevBuf, CL_TRUE, CL_MAP_READ, 0, MAX_NPIXELS*sizeof(float)*N);
 
     time_point<system_clock> start = system_clock::now();
 #ifdef TIMERS
@@ -180,7 +181,7 @@ int main(int argc, char *argv[]) {
     duration<double> elapsedCopyTo(0.0), elapsedCopyFrom(0.0);
 #endif
 
-    unsigned long byteCounter = 0;
+    double mbyteCounter = 0;
     for(unsigned long eventCounter=0; eventCounter<numEvents; eventCounter++) {
 
         // get event data
@@ -212,25 +213,26 @@ int main(int argc, char *argv[]) {
         startCopyTo = std::chrono::system_clock::now();
 #endif
         // copy to pinned memory
-        memcpy(inData, buff, buffSize);
+        for(unsigned int i=0; i<N; i++)
+            memcpy(inData+i*buffSize, buff, buffSize);
         // copy input buffer into pinned dev memory
 #ifdef TIMERS
-        queue.enqueueWriteBuffer(inDevBuf, CL_TRUE, 0, buffSize, inData, 0);
+        queue.enqueueWriteBuffer(inDevBuf, CL_TRUE, 0, buffSize*N, inData, 0);
         endCopyTo = std::chrono::system_clock::now();
         elapsedCopyTo += endCopyTo - startCopyTo;
         startExtract = std::chrono::system_clock::now();
 #else
-        queue.enqueueWriteBuffer(inDevBuf, CL_FALSE, 0, buffSize, inData, 0);
+        queue.enqueueWriteBuffer(inDevBuf, CL_FALSE, 0, buffSize*N, inData, 0);
 #endif
 
         // compute waveform extraction
         kernelExtract.setArg(0, inDevBuf);
         kernelExtract.setArg(1, maxDevBuf);
         kernelExtract.setArg(2, timeDevBuf);
-        kernelExtract.setArg(3, nPixels);
+        kernelExtract.setArg(3, nPixels*N);
         kernelExtract.setArg(4, nSamples);
         kernelExtract.setArg(5, windowSize);
-        cl::NDRange global(nPixels);
+        cl::NDRange global(nPixels*N);
         cl::NDRange local(cl::NullRange);
         queue.enqueueNDRangeKernel(kernelExtract, cl::NullRange, global, local);
 
@@ -242,8 +244,8 @@ int main(int argc, char *argv[]) {
 #endif
 
         // copy pinned dev memory buffers to output
-        queue.enqueueReadBuffer(maxDevBuf, CL_FALSE, 0, nPixels*sizeof(unsigned short), maxData);
-        queue.enqueueReadBuffer(timeDevBuf, CL_TRUE, 0, nPixels*sizeof(float), timeData);
+        queue.enqueueReadBuffer(maxDevBuf, CL_FALSE, 0, nPixels*N*sizeof(unsigned short), maxData);
+        queue.enqueueReadBuffer(timeDevBuf, CL_TRUE, 0, nPixels*N*sizeof(float), timeData);
 
 #ifdef TIMERS
         endCopyFrom = std::chrono::system_clock::now();
@@ -263,15 +265,16 @@ int main(int argc, char *argv[]) {
             std::cout << "result: " << " " << maxData[pixelIdx] << " " << timeData[pixelIdx] << " " << std::endl;
         }
 #endif
-        byteCounter += buffSize;
+        mbyteCounter += (buffSize*N) / 1000000.0;
     }
 
     time_point<system_clock> end = system_clock::now();
 
     duration<double> elapsed = end-start;
-    double throughputE = numEvents / elapsed.count();
-    double throughputB = byteCounter / elapsed.count() / 1000000;
+    double throughputE = (numEvents*N) / elapsed.count();
+    double throughputB = mbyteCounter / elapsed.count();
     std::cout << numEvents << " events" << std::endl;
+    std::cout << mbyteCounter << " MB" << std::endl;
 #ifdef TIMERS
     std::cout << "Elapsed packet    " << std::setprecision(2) << std::fixed << elapsedPacket.count() << std::endl;
     std::cout << "Elapsed copy to   " << std::setprecision(2) << std::fixed << elapsedCopyTo.count() << std::endl;
