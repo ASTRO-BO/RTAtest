@@ -1,8 +1,8 @@
 /* Kernel for waveform extraction */
 
-__kernel void waveExtract(__global const unsigned short* inBuf,
-                          __global unsigned short* maxBuf,
-                          __global float* timeBuf,
+__kernel void waveExtract(__global const unsigned short* restrict inBuf,
+                          __global unsigned short* restrict maxBuf,
+                          __global float* restrict timeBuf,
                           unsigned int nPixels,
                           unsigned int nSamples,
                           unsigned int windowSize) {

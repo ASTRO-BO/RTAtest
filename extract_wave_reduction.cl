@@ -22,8 +22,8 @@
  */
 __constant unsigned int windowSize = 6;
 
-__kernel void sum(__global const unsigned short* inBuf,
-                  __global unsigned short* sumBuf,
+__kernel void sum(__global const unsigned short* restrict inBuf,
+                  __global unsigned short* restrict sumBuf,
                   unsigned int nSamples) {
 
     unsigned int gid = get_global_id(0);
@@ -54,7 +54,7 @@ __kernel void sum(__global const unsigned short* inBuf,
   P1    0           P2      8           n = 8
 */
 
-__kernel void maximum(__global unsigned short* sumBuf,
+__kernel void maximum(__global unsigned short* restrict sumBuf,
                       unsigned int nSamples,
                       unsigned int n) {
 
