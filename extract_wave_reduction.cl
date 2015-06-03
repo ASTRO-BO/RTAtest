@@ -24,7 +24,7 @@ __constant unsigned int windowSize = 6;
 
 __kernel void sum(__global const unsigned short* restrict inBuf,
                   __global unsigned short* restrict sumBuf,
-                  unsigned int nSamples) {
+                  __const unsigned int nSamples) {
 
     unsigned int gid = get_global_id(0);
     unsigned int sample = gid % nSamples;
@@ -38,41 +38,25 @@ __kernel void sum(__global const unsigned short* restrict inBuf,
         sum += inBuf[gid+i];
     }
     sumBuf[gid] = sum;
-
-//    if(gid == 40 || gid == 41)
-//        printf("gid %d: sum: %d\n", gid, sum);
 }
 
-/* reduction opencl call it recusively
-
-0  1  2  3  4  5    8  9 10 11 12 13
- \/    \/    \/      \/   \/    \/
- 0     2     4       8    10    12      n = 2
-  \   /      |        \   /     |
-    0        4          8      12       n = 4
-      \    /              \   /
-  P1    0           P2      8           n = 8
-*/
-
 __kernel void maximum(__global unsigned short* restrict sumBuf,
-                      unsigned int nSamples,
-                      unsigned int n) {
+                      __global unsigned short* restrict maxBuf,
+                      __global unsigned short* restrict offBuf,
+                      __const unsigned int nSamples) {
 
-    unsigned int gid = get_global_id(0);
-    unsigned int sample = gid % nSamples;
+    unsigned int pixel = get_global_id(0);
 
-    if(sample % n != 0)
-        return;
+    unsigned short maxv = 0;
+    unsigned short off = 0;
 
-    if(sample+n > nSamples-windowSize)
-        return;
-
-//    if(gid < 80 && gid >= 40) printf("gid=%d - nsamples=%d - n=%d - sample=%d - %d %d", gid, nSamples, n, sample, sumBuf[gid], sumBuf[gid+n]);
-    unsigned short lvalue = sumBuf[gid];
-    unsigned short rvalue = sumBuf[gid+n];
-    if(rvalue > lvalue)
-        sumBuf[gid] = rvalue;
-
-//    if(gid < 80 && gid >= 40) printf("-> %d\n", sumBuf[gid]);
-
+    for(unsigned int i=0; i<nSamples-windowSize; i++) {
+        unsigned short v = sumBuf[pixel*nSamples+i];
+        if(v > maxv) {
+            maxv = v;
+            off = i;
+        }
+    }
+    maxBuf[pixel] = maxv;
+    offBuf[pixel] = off;
 }

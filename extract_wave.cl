@@ -3,9 +3,9 @@
 __kernel void waveExtract(__global const unsigned short* restrict inBuf,
                           __global unsigned short* restrict maxBuf,
                           __global float* restrict timeBuf,
-                          unsigned int nPixels,
-                          unsigned int nSamples,
-                          unsigned int windowSize) {
+                          __const unsigned int nPixels,
+                          __const unsigned int nSamples,
+                          __const unsigned int windowSize) {
 
     int gid = get_global_id(0);
     int pixelOff = gid*nSamples;
