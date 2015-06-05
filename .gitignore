@@ -3,7 +3,7 @@ mt
 pwave_serial
 pwave_omp
 pwave_cl
-pwave_cl_reduction
-pwave_cl_reduction_off
 pwave_cl_altera
+pwave_cl_reduction
+pwave_cl_reduction_altera
 pwave_cl.dSYM

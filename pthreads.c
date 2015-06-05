@@ -4,7 +4,9 @@
 #include<stdlib.h>
 #include<unistd.h>
 
-pthread_t tid[24];
+#define NTHREADS 64
+
+pthread_t tid[NTHREADS];
 
 void* doSomeThing(void *arg)
 {
@@ -21,22 +23,16 @@ int main(void)
     int i = 0;
     int err;
 
-    while(i < 64)
-    {
+    for(i=0; i<NTHREADS; i++) {
         err = pthread_create(&(tid[i]), NULL, &doSomeThing, NULL);
         if (err != 0)
             printf("\ncan't create thread :[%s]", strerror(err));
         else
             printf("\n Thread created successfully\n");
-
-        i++;
     }
 
-    i=0;
-    while(i < 64)
-    {
+    for(i=0; i<NTHREADS; i++) {
         pthread_join(tid[i], NULL);
-	i++;
     }
     return 0;
 }
