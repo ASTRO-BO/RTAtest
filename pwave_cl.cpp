@@ -229,9 +229,7 @@ int main(int argc, char *argv[]) {
         kernelExtract.setArg(0, inDevBuf);
         kernelExtract.setArg(1, maxDevBuf);
         kernelExtract.setArg(2, timeDevBuf);
-        kernelExtract.setArg(3, nPixels*N);
-        kernelExtract.setArg(4, nSamples);
-        kernelExtract.setArg(5, windowSize);
+        kernelExtract.setArg(3, nSamples);
         cl::NDRange global(nPixels*N);
         cl::NDRange local(cl::NullRange);
         queue.enqueueNDRangeKernel(kernelExtract, cl::NullRange, global, local);

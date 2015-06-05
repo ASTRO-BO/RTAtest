@@ -33,7 +33,6 @@ __kernel void sum(__global const unsigned short* restrict inBuf,
         return;
 
     unsigned short sum = 0;
-    #pragma unroll
     for(unsigned int i=0; i<windowSize; i++) {
         sum += inBuf[gid+i];
     }
