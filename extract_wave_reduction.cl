@@ -20,37 +20,37 @@
     window size = 3
     n pixels = 2
  */
-__constant unsigned int windowSize = 6;
+__constant uint windowSize = 6;
 
-__kernel void sum(__global const unsigned short* restrict inBuf,
-                  __global unsigned short* restrict sumBuf,
-                  __const unsigned int nSamples) {
+__kernel void sum(__global const ushort* restrict inBuf,
+                  __global ushort* restrict sumBuf,
+                  __const uint nSamples) {
 
-    unsigned int gid = get_global_id(0);
-    unsigned int sample = gid % nSamples;
+    size_t gid = get_global_id(0);
+    size_t sample = gid % nSamples;
 
     if(sample > nSamples-windowSize)
         return;
 
-    unsigned short sum = 0;
-    for(unsigned int i=0; i<windowSize; i++) {
+    ushort sum = 0;
+    for(uint i=0; i<windowSize; i++) {
         sum += inBuf[gid+i];
     }
     sumBuf[gid] = sum;
 }
 
-__kernel void maximum(__global unsigned short* restrict sumBuf,
-                      __global unsigned short* restrict maxBuf,
-                      __global unsigned short* restrict offBuf,
-                      __const unsigned int nSamples) {
+__kernel void maximum(__global ushort* restrict sumBuf,
+                      __global ushort* restrict maxBuf,
+                      __global ushort* restrict offBuf,
+                      __const uint nSamples) {
 
-    unsigned int pixel = get_global_id(0);
+    uint pixel = get_global_id(0);
 
-    unsigned short maxv = 0;
-    unsigned short off = 0;
+    ushort maxv = 0;
+    ushort off = 0;
 
-    for(unsigned int i=0; i<nSamples-windowSize; i++) {
-        unsigned short v = sumBuf[pixel*nSamples+i];
+    for(uint i=0; i<nSamples-windowSize; i++) {
+        ushort v = sumBuf[pixel*nSamples+i];
         if(v > maxv) {
             maxv = v;
             off = i;

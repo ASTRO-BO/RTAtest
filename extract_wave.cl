@@ -1,29 +1,29 @@
 /* Kernel for waveform extraction */
 
-__constant int windowSize = 6;
+__constant uint windowSize = 6;
 
-__kernel void waveExtract(__global const unsigned short* restrict inBuf,
-                          __global unsigned short* restrict maxBuf,
+__kernel void waveExtract(__global const ushort* restrict inBuf,
+                          __global ushort* restrict maxBuf,
                           __global float* restrict timeBuf,
-                          unsigned int nSamples) {
+                          uint nSamples) {
 
-    int gid = get_global_id(0);
-    int pixelOff = gid*nSamples;
+    size_t gid = get_global_id(0);
+    size_t pixelOff = gid*nSamples;
 
-    unsigned short sumn = 0;
-    unsigned short sum = 0;
+    ushort sumn = 0;
+    ushort sum = 0;
 
-    for(unsigned int winIdx=0; winIdx<windowSize; winIdx++) {
+    for(uint winIdx=0; winIdx<windowSize; winIdx++) {
         sum += inBuf[pixelOff + winIdx];
         sumn += inBuf[pixelOff + winIdx] * winIdx;
     }
 
-    unsigned short maxv = sum;
+    ushort maxv = sum;
     float maxt = sumn / (float)sum;
 
-    for(unsigned int sampleIdx=1; sampleIdx<nSamples-windowSize; sampleIdx++) {
-        unsigned int prev = sampleIdx-1;
-        unsigned int succ = sampleIdx+windowSize-1;
+    for(uint sampleIdx=1; sampleIdx<nSamples-windowSize; sampleIdx++) {
+        uint prev = sampleIdx-1;
+        uint succ = sampleIdx+windowSize-1;
         sum = sum - inBuf[pixelOff+prev] + inBuf[pixelOff+succ];
         sumn = sumn - inBuf[pixelOff+prev] * prev + inBuf[pixelOff+succ] * succ;
         if(sum > maxv) {
