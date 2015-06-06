@@ -24,7 +24,8 @@ __constant uint windowSize = 6;
 
 __kernel void sum(__global const ushort* restrict inBuf,
                   __global ushort* restrict sumBuf,
-                  __const uint nSamples) {
+                  uint nPixels,
+                  uint nSamples) {
 
     size_t gid = get_global_id(0);
     size_t sample = gid % nSamples;
@@ -34,7 +35,7 @@ __kernel void sum(__global const ushort* restrict inBuf,
 
     ushort sum = 0;
     for(uint i=0; i<windowSize; i++) {
-        sum += inBuf[gid+i];
+        sum += inBuf[gid%nPixels+i];
     }
     sumBuf[gid] = sum;
 }
@@ -42,7 +43,7 @@ __kernel void sum(__global const ushort* restrict inBuf,
 __kernel void maximum(__global ushort* restrict sumBuf,
                       __global ushort* restrict maxBuf,
                       __global ushort* restrict offBuf,
-                      __const uint nSamples) {
+                      uint nSamples) {
 
     uint pixel = get_global_id(0);
 

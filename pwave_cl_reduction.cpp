@@ -216,24 +216,25 @@ int main(int argc, char *argv[]) {
 
         // copy to pinned memory
         for(unsigned int i=0; i<N; i++)
-            memcpy(inData+i*buffSize, buff, buffSize);
+            memcpy(inData+i*(buffSize*sizeof(unsigned short)), buff, buffSize*sizeof(unsigned short));
         // copy input buffer into pinned dev memory
 #ifdef TIMERS
         endCopyToPinned = std::chrono::system_clock::now();
         elapsedCopyToPinned += endCopyTo - startCopyTo;
         startCopyTo = std::chrono::system_clock::now();
-        queue.enqueueWriteBuffer(inDevBuf, CL_TRUE, 0, buffSize*N, inData);
+        queue.enqueueWriteBuffer(inDevBuf, CL_TRUE, 0, buffSize*sizeof(unsigned short)*N, inData);
         endCopyTo = std::chrono::system_clock::now();
         elapsedCopyTo += endCopyTo - startCopyTo;
         startExtract = std::chrono::system_clock::now();
 #else
-        queue.enqueueWriteBuffer(inDevBuf, CL_FALSE, 0, buffSize*N, inData);
+        queue.enqueueWriteBuffer(inDevBuf, CL_FALSE, 0, buffSize*sizeof(unsigned short)*N, inData);
 #endif
 
         // compute waveform extraction
         kernelSum.setArg(0, inDevBuf);
         kernelSum.setArg(1, sumDevBuf);
-        kernelSum.setArg(2, nSamples);
+        kernelSum.setArg(2, nPixels);
+        kernelSum.setArg(3, nSamples);
         cl::NDRange global(nPixels*N*nSamples);
         cl::NDRange local(cl::NullRange);
         queue.enqueueNDRangeKernel(kernelSum, cl::NullRange, global, local);
@@ -263,8 +264,8 @@ int main(int argc, char *argv[]) {
 #ifdef DEBUG
         std::cout << "npixels: " << nPixels << std::endl;
         std::cout << "nsamples: " << nSamples << std::endl;
-        for(int pixelIdx = 0; pixelIdx<nPixels; pixelIdx++) {
-            PacketLib::word* s = (PacketLib::word*) buff + pixelIdx * nSamples;
+        for(int pixelIdx = 0; pixelIdx<nPixels*N; pixelIdx++) {
+            PacketLib::word* s = (PacketLib::word*) buff + (pixelIdx%nPixels) * nSamples;
             std::cout << "pixel: " << pixelIdx << " samples: ";
             for(int sampleIdx=0; sampleIdx<nSamples; sampleIdx++) {
                 std::cout << s[sampleIdx] << " ";
