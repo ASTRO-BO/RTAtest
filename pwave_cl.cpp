@@ -81,7 +81,7 @@ void printDevices(std::vector<cl::Device>& devices) {
 int main(int argc, char *argv[]) {
     if(argc < 4) {
         std::cout << "Wrong arguments, please provide config file, raw input file and number of events." << std::endl;
-        std::cout << argv[0] << " config.xml input.raw <nevents> [platformnum] [devicenum]" << std::endl;
+        std::cout << argv[0] << " config.xml input.raw <nevents> [platformnum] [devicenum] [multiplier]" << std::endl;
         return 1;
     }
 
@@ -91,10 +91,13 @@ int main(int argc, char *argv[]) {
     const unsigned long numEvents = std::atol(argv[3]);
     unsigned int platformnum = 0;
     unsigned int devicenum = 0;
+    unsigned int N = 1;
     if(argc >= 5)
         platformnum = atoi(argv[4]);
     if(argc >= 6)
         devicenum = atoi(argv[5]);
+    if(argc >= 7)
+        N = atoi(argv[6]);
 
     PacketLib::PacketBufferV events(configFilename, inputFilename);
     events.load();
@@ -160,7 +163,6 @@ int main(int argc, char *argv[]) {
     cl::CommandQueue queue(context, devices[devicenum], CL_QUEUE_PROFILING_ENABLE, NULL);
 
     // allocate buffers
-    const unsigned int N = 1;
     const unsigned int MAX_NPIXELS = 3000;
     const unsigned int MAX_NSAMPLES = 100;
     const unsigned int MAX_EVENT_SIZE = MAX_NPIXELS * MAX_NSAMPLES * sizeof(unsigned short) * N;
