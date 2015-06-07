@@ -235,8 +235,7 @@ int main(int argc, char *argv[]) {
         // compute waveform extraction
         kernelSum.setArg(0, inDevBuf);
         kernelSum.setArg(1, sumDevBuf);
-        kernelSum.setArg(2, nPixels);
-        kernelSum.setArg(3, nSamples);
+        kernelSum.setArg(2, nSamples);
         cl::NDRange global(nPixels*N*nSamples);
         cl::NDRange local(cl::NullRange);
         queue.enqueueNDRangeKernel(kernelSum, cl::NullRange, global, local);
