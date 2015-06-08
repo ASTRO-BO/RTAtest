@@ -1,4 +1,4 @@
-all: pthreads mt pwave_serial omp cl altera
+all: pthreads mt pwave_serial pwave_omp cl altera
 
 CFLAGS=-O2 -g
 CXXFLAGS=-O2 -g
@@ -21,19 +21,19 @@ mt: mt.cpp
 pwave_serial: pwave_serial.cpp
 	$(CXX) $(CXXFLAGS) -std=c++11 pwave_serial.cpp -o pwave_serial -lpacket -lcfitsio -lCTAConfig -lCTAUtils
 
-omp: pwave_serial.cpp
+pwave_omp: pwave_serial.cpp
 	$(CXX) $(CXXFLAGS) -std=c++11 -fopenmp -DOMP pwave_serial.cpp -o pwave_omp -lpacket -lcfitsio -lCTAConfig -lCTAUtils
 
 cl: pwave_cl pwave_cl2 pwave_cl3
 
 pwave_cl: pwave_cl.cpp
-	$(CXX) $(CXXFLAGS) -std=c++11 -I. pwave_cl.cpp -o pwave_cl -lpacket -lcfitsio -lCTAConfig -lCTAUtils -pthread $(OCL_LIBS)
+	$(CXX) $(CXXFLAGS) -std=c++11 -I. pwave_cl.cpp -o pwave_cl -lpacket -lcfitsio -lCTAConfig -lCTAUtils $(OCL_LIBS)
 
 pwave_cl2: pwave_cl2.cpp
-	$(CXX) $(CXXFLAGS) -std=c++11 -I. pwave_cl2.cpp -o pwave_cl2 -lpacket -lcfitsio -lCTAConfig -lCTAUtils -pthread $(OCL_LIBS)
+	$(CXX) $(CXXFLAGS) -std=c++11 -I. pwave_cl2.cpp -o pwave_cl2 -lpacket -lcfitsio -lCTAConfig -lCTAUtils $(OCL_LIBS)
 
 pwave_cl3: pwave_cl3.cpp
-	$(CXX) $(CXXFLAGS) -std=c++11 -I. pwave_cl3.cpp -o pwave_cl3 -lpacket -lcfitsio -lCTAConfig -lCTAUtils -pthread $(OCL_LIBS)
+	$(CXX) $(CXXFLAGS) -std=c++11 -I. pwave_cl3.cpp -o pwave_cl3 -lpacket -lcfitsio -lCTAConfig -lCTAUtils $(OCL_LIBS)
 
 altera: pwave_cl_altera pwave_cl2_altera pwave_cl3_altera
 
