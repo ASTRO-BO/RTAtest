@@ -140,7 +140,7 @@ int main(int argc, char *argv[]) {
     cl::Program::Binaries binaries(1, std::make_pair(&b[0], size));
     cl::Program program(context, devices, binaries);
 #else
-    std::string source = loadProgram("extract_wave.cl");
+    std::string source = loadProgram("extract3.cl");
     cl::Program::Sources sources(1, std::make_pair(source.c_str(), source.length()));
     cl::Program program(context, sources);
 #endif

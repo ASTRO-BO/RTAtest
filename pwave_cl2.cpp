@@ -129,7 +129,7 @@ int main(int argc, char *argv[]) {
 
     // compile OpenCL programs
 #ifdef CL_ALTERA
-    std::ifstream file("extract_wave_reduction.aocx", std::ios::binary);
+    std::ifstream file("extract2.aocx", std::ios::binary);
     file.seekg(0, std::ios::end);
     std::streamsize size = file.tellg();
     file.seekg(0, std::ios::beg);
@@ -138,7 +138,7 @@ int main(int argc, char *argv[]) {
     cl::Program::Binaries binaries(1, std::make_pair(&b[0], size));
     cl::Program program(context, devices, binaries);
 #else
-    std::string source = loadProgram("extract_wave_reduction.cl");
+    std::string source = loadProgram("extract2.cl");
     cl::Program::Sources sources(1, std::make_pair(source.c_str(), source.length()));
     cl::Program program(context, sources);
 #endif
