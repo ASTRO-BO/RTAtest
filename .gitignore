@@ -3,7 +3,11 @@ mt
 pwave_serial
 pwave_omp
 pwave_cl
+pwave_cl2
+pwave_cl3
 pwave_cl_altera
-pwave_cl_reduction
-pwave_cl_reduction_altera
-pwave_cl.dSYM
+pwave_cl2_altera
+pwave_cl3_altera
+extract*/
+*.aoco
+*.aocx
