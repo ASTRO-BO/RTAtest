@@ -67,7 +67,7 @@ int main(int argc, char *argv[]) {
 
     // compile OpenCL programs
 #ifdef CL_ALTERA
-    std::ifstream file("extract3.aocx", std::ios::binary);
+    std::ifstream file("extract2.aocx", std::ios::binary);
     file.seekg(0, std::ios::end);
     std::streamsize size = file.tellg();
     file.seekg(0, std::ios::beg);
@@ -76,13 +76,13 @@ int main(int argc, char *argv[]) {
     cl::Program::Binaries binaries(1, std::make_pair(&b[0], size));
     cl::Program program(context, devices, binaries);
 #else
-    std::string source = loadProgram("extract3.cl");
+    std::string source = loadProgram("extract2.cl");
     cl::Program::Sources sources(1, std::make_pair(source.c_str(), source.length()));
     cl::Program program(context, sources);
 #endif
 
     try {
-        program.build(devices);
+        program.build(devices, "-cl-finite-math-only");
     }
     catch (cl::Error err) {
         if (err.err() == CL_BUILD_PROGRAM_FAILURE) {
@@ -95,27 +95,31 @@ int main(int argc, char *argv[]) {
     }
 
     // create a kernel and a queue
-    cl::Kernel kernelExtract(program, "waveExtract");
+    cl::Kernel kernelSum(program, "sum");
+    cl::Kernel kernelMaximum(program, "maximum");
     cl::CommandQueue queue(context, devices[devicenum], CL_QUEUE_PROFILING_ENABLE, NULL);
 
+    // allocate buffers
     const unsigned int MAX_NPIXELS = 3000;
     const unsigned int MAX_NSAMPLES = 100;
     const unsigned int MAX_EVENT_SIZE = MAX_NPIXELS * MAX_NSAMPLES * sizeof(unsigned short) * N;
     cl::Buffer inDevBuf(context, CL_MEM_READ_ONLY | CL_MEM_ALLOC_HOST_PTR, MAX_EVENT_SIZE, NULL, NULL);
+    cl::Buffer sumDevBuf(context, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR, MAX_EVENT_SIZE, NULL, NULL);
     cl::Buffer maxDevBuf(context, CL_MEM_WRITE_ONLY | CL_MEM_ALLOC_HOST_PTR, MAX_NPIXELS*sizeof(unsigned int)*N, NULL, NULL);
-    cl::Buffer timeDevBuf(context, CL_MEM_WRITE_ONLY | CL_MEM_ALLOC_HOST_PTR, MAX_NPIXELS*sizeof(float)*N, NULL, NULL);
-    PacketLib::byte* inData = (PacketLib::byte*) queue.enqueueMapBuffer(inDevBuf, CL_FALSE, CL_MAP_WRITE, 0, MAX_EVENT_SIZE);
+    cl::Buffer offDevBuf(context, CL_MEM_WRITE_ONLY | CL_MEM_ALLOC_HOST_PTR, MAX_NPIXELS*sizeof(unsigned int)*N, NULL, NULL);
+    unsigned short* inData = (unsigned short*) queue.enqueueMapBuffer(inDevBuf, CL_FALSE, CL_MAP_WRITE, 0, MAX_EVENT_SIZE);
     unsigned short* maxData = (unsigned short*) queue.enqueueMapBuffer(maxDevBuf, CL_FALSE, CL_MAP_READ, 0, MAX_NPIXELS*sizeof(unsigned int)*N);
-    float* timeData = (float*) queue.enqueueMapBuffer(timeDevBuf, CL_FALSE, CL_MAP_READ, 0, MAX_NPIXELS*sizeof(float)*N);
+    unsigned short* offData = (unsigned short*) queue.enqueueMapBuffer(offDevBuf, CL_FALSE, CL_MAP_READ, 0, MAX_NPIXELS*sizeof(unsigned int)*N);
 
     time_point<system_clock> start = system_clock::now();
 #ifdef TIMERS
     time_point<system_clock> startPacket, endPacket;
     time_point<system_clock> startCopyTo, endCopyTo;
     time_point<system_clock> startBuffering, endBuffering;
-    time_point<system_clock> startExtract, endExtract;
+    time_point<system_clock> startSum, endSum;
+    time_point<system_clock> startMax, endMax;
     time_point<system_clock> startCopyFrom, endCopyFrom;
-    duration<double> elapsedPacket(0.0), elapsedExtract(0.0);
+    duration<double> elapsedPacket(0.0), elapsedSum(0.0), elapsedMax(0.0);
     duration<double> elapsedBuffering(0.0), elapsedCopyTo(0.0), elapsedCopyFrom(0.0);
 #endif
 
@@ -150,16 +154,20 @@ int main(int argc, char *argv[]) {
         std::cout << "nSamples:    " << nSamples << std::endl;
         std::cout << "buffSize:    " << buffSize << std::endl;
 #endif
-        if(nSamples != 40) {
-            eventCounter--;
-            continue;
-        }
 
 #ifdef TIMERS
         endPacket = system_clock::now();
         elapsedPacket += endPacket - startPacket;
         startBuffering = std::chrono::system_clock::now();
 #endif
+        const float BLOCK_SIZE = 1024;
+        unsigned int ly = nSamples;
+        unsigned int lx = BLOCK_SIZE / nSamples;
+        N -= N % lx;
+        std::cout << "lx: " << lx << std::endl;
+        std::cout << "ly: " << ly << std::endl;
+        std::cout << "N: " << N << std::endl;
+
         // copy raw data multiple times (to simulate packet buffering)
         for(unsigned int i=0; i<N; i++)
             memcpy(inData+i*nPixels*nSamples, buff, buffSize);
@@ -174,27 +182,39 @@ int main(int argc, char *argv[]) {
         queue.enqueueWriteBuffer(inDevBuf, CL_TRUE, 0, buffSize*N, inData);
         endCopyTo = std::chrono::system_clock::now();
         elapsedCopyTo += endCopyTo - startCopyTo;
-        startExtract = std::chrono::system_clock::now();
+        startSum = std::chrono::system_clock::now();
 #endif
 
         // compute waveform extraction kernels
-        kernelExtract.setArg(0, inDevBuf);
-        kernelExtract.setArg(1, maxDevBuf);
-        kernelExtract.setArg(2, timeDevBuf);
-        kernelExtract.setArg(3, nSamples);
-        cl::NDRange global(nPixels, nSamples, N);
-        cl::NDRange local(1, nSamples, 1);
-        queue.enqueueNDRangeKernel(kernelExtract, cl::NullRange, global, local);
+        kernelSum.setArg(0, inDevBuf);
+        kernelSum.setArg(1, sumDevBuf);
+        kernelSum.setArg(2, nPixels);
+        kernelSum.setArg(3, nSamples);
+        cl::NDRange global(nPixels*N, nSamples);
+        cl::NDRange local(lx, ly);
+        queue.enqueueNDRangeKernel(kernelSum, cl::NullRange, global, local);
 #ifdef TIMERS
         queue.finish();
-        endExtract = system_clock::now();
-        elapsedExtract += endExtract - startExtract;
+        endSum = system_clock::now();
+        elapsedSum += endSum - startSum;
+        startMax = std::chrono::system_clock::now();
+#endif
+        kernelMaximum.setArg(0, sumDevBuf);
+        kernelMaximum.setArg(1, maxDevBuf);
+        kernelMaximum.setArg(2, offDevBuf);
+        kernelMaximum.setArg(3, nSamples);
+        cl::NDRange globalMax(nPixels*N);
+        cl::NDRange localMax(cl::NullRange);
+        queue.enqueueNDRangeKernel(kernelMaximum, cl::NullRange, globalMax, localMax);
+#ifdef TIMERS
+        queue.finish();
+        endMax = system_clock::now();
+        elapsedMax += endMax - startMax;
         startCopyFrom = std::chrono::system_clock::now();
 #endif
         // copy output data back from device
         queue.enqueueReadBuffer(maxDevBuf, CL_FALSE, 0, nPixels*sizeof(unsigned short)*N, maxData);
-        queue.enqueueReadBuffer(timeDevBuf, CL_TRUE, 0, nPixels*sizeof(float)*N, timeData);
-
+        queue.enqueueReadBuffer(offDevBuf, CL_TRUE, 0, nPixels*sizeof(unsigned short)*N, offData);
 
 #ifdef TIMERS
         endCopyFrom = std::chrono::system_clock::now();
@@ -209,7 +229,7 @@ int main(int argc, char *argv[]) {
                 std::cout << s[sampleIdx] << " ";
             }
             std::cout << std::endl;
-            std::cout << "result: " << " " << maxData[pixelIdx] << " " << timeData[pixelIdx] << std::endl;
+            std::cout << "result: " << " " << maxData[pixelIdx] << " " << offData[pixelIdx] << std::endl;
         }
 #endif
         mbyteCounter += (buffSize*N) / 1000000.0;
@@ -222,15 +242,16 @@ int main(int argc, char *argv[]) {
     std::cout.precision(2);
 #ifdef TIMERS
     std::cout << "Partial results" << std::endl;
-    std::cout << "Elapsed packet:         " << setw(8) << elapsedPacket.count() << " s" << std::endl;
-    std::cout << "Elapsed buffering:      " << setw(8) << elapsedBuffering.count() << " s" << std::endl;
-    std::cout << "Elapsed copy to:        " << setw(8) << elapsedCopyTo.count() << " s" << std::endl;
-    std::cout << "Elapsed extract kernel: " << setw(8) << elapsedExtract.count() << " s" << std::endl;
-    std::cout << "Elapsed copy from:      " << setw(8) << elapsedCopyFrom.count() << " s" << std::endl;
+    std::cout << "Elapsed packet:     " << setw(8) << elapsedPacket.count() << " s" << std::endl;
+    std::cout << "Elapsed buffering:  " << setw(8) << elapsedBuffering.count() << " s" << std::endl;
+    std::cout << "Elapsed copy to:    " << setw(8) << elapsedCopyTo.count() << " s" << std::endl;
+    std::cout << "Elapsed sum kernel: " << setw(8) << elapsedSum.count() << " s" << std::endl;
+    std::cout << "Elapsed max kernel: " << setw(8) << elapsedMax.count() << " s" << std::endl;
+    std::cout << "Elapsed copy from:  " << setw(8) << elapsedCopyFrom.count() << " s" << std::endl;
     double memPerc = elapsed.count() / (elapsedBuffering.count()+elapsedCopyTo.count()+elapsedCopyFrom.count());
-    std::cout << "Elapsed on memory:      " << setw(8) << memPerc << " %" << std::endl;
-    double kernelPerc = elapsed.count() / elapsedExtract.count();
-    std::cout << "Elapsed on kernels:     " << setw(8) << kernelPerc << " %" << std::endl;
+    std::cout << "Elapsed on memory:  " << setw(8) << memPerc << " %" << std::endl;
+    double kernelPerc = elapsed.count() / (elapsedSum.count()+elapsedMax.count());
+    std::cout << "Elapsed on kernels: " << setw(8) << kernelPerc << " %" << std::endl;
 #endif
     double throughputEvt = (numEvents*N) / elapsed.count();
     double throughput = mbyteCounter / elapsed.count();
