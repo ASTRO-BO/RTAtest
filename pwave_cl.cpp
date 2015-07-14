@@ -8,7 +8,7 @@
 #include <iomanip>
 
 //#define DEBUG 1
-#define TIMERS 1
+//#define TIMERS 1
 
 using std::chrono::time_point;
 using std::chrono::duration;
@@ -119,7 +119,7 @@ int main(int argc, char *argv[]) {
     duration<double> elapsedBuffering(0.0), elapsedCopyTo(0.0), elapsedCopyFrom(0.0);
 #endif
 
-    double mbyteCounter = 0;
+    unsigned long byteCounter = 0;
     for(unsigned long eventCounter=0; eventCounter<numEvents; eventCounter++) {
 
 #ifdef TIMERS
@@ -208,40 +208,44 @@ int main(int argc, char *argv[]) {
             std::cout << "result: " << " " << maxData[pixelIdx] << " " << timeData[pixelIdx] << std::endl;
         }
 #endif
-        mbyteCounter += (buffSize*N) / 1000000.0;
+        byteCounter += buffSize;
     }
 
     time_point<system_clock> end = system_clock::now();
-    duration<double> elapsed = end-start;
+
+    duration<double> elapsedD = end-start;
+    double elapsed = elapsedD.count();
 
     std::cout.setf(ios::fixed);
     std::cout.precision(2);
 #ifdef TIMERS
-    std::cout << "Partial results" << std::endl;
-    std::cout << "Elapsed packet:         " << setw(8) << elapsedPacket.count() << " s" << std::endl;
-    std::cout << "Elapsed buffering:      " << setw(8) << elapsedBuffering.count() << " s" << std::endl;
-    std::cout << "Elapsed copy to:        " << setw(8) << elapsedCopyTo.count() << " s" << std::endl;
-    std::cout << "Elapsed extract kernel: " << setw(8) << elapsedExtract.count() << " s" << std::endl;
-    std::cout << "Elapsed copy from:      " << setw(8) << elapsedCopyFrom.count() << " s" << std::endl;
-    double memPerc = elapsed.count() / (elapsedBuffering.count()+elapsedCopyTo.count()+elapsedCopyFrom.count());
+    std::cout << "PARTIAL RESULTS" << std::endl;
+    std::cout << "---------------" << std::endl;
+    std::cout << "Elapsed packet:         " << setw(10) << elapsedPacket.count() << " s" << std::endl;
+    std::cout << "Elapsed buffering:      " << setw(10) << elapsedBuffering.count() << " s" << std::endl;
+    std::cout << "Elapsed copy to:        " << setw(10) << elapsedCopyTo.count() << " s" << std::endl;
+    std::cout << "Elapsed extract kernel: " << setw(10) << elapsedExtract.count() << " s" << std::endl;
+    std::cout << "Elapsed copy from:      " << setw(10) << elapsedCopyFrom.count() << " s" << std::endl;
+    double memPerc = (elapsedBuffering.count()+elapsedCopyTo.count()+elapsedCopyFrom.count()) / elapsed.count() * 100;
     std::cout << "Elapsed on memory:      " << setw(8) << memPerc << " %" << std::endl;
-    double kernelPerc = elapsed.count() / elapsedExtract.count();
+    double kernelPerc = elapsedExtract.count() / elapsed.count() * 100;
     std::cout << "Elapsed on kernels:     " << setw(8) << kernelPerc << " %" << std::endl;
 #endif
-    double throughputEvt = (numEvents*N) / elapsed.count();
-    double throughput = mbyteCounter / elapsed.count();
-    std::cout << std::endl <<  "Global results" << std::endl;
-    std::cout << "Number of events:  " << setw(8) << numEvents << std::endl;
-    std::cout << "Mean buffer size:  " << setw(8) << mbyteCounter / numEvents  << " MB" << std::endl;
-    std::cout << "Elapsed total      " << setw(8) << elapsed.count() << " s" << std::endl;
-    std::cout << "Throughput total:  " << setw(8) << throughputEvt << " events/s" << std::endl;
-    std::cout << "                   " << setw(8) << throughput << " MB/s" << std::endl;
+    double throughputEvt = (numEvents*N) / elapsed;
+    double throughput = (byteCounter*N) / (elapsed * 1000000.0);
+
+    std::cout << std::endl <<  "TOTAL RESULTS" << std::endl;
+    std::cout << "---------------" << std::endl;
+    std::cout << "Number of events:  " << setw(10) << (float)numEvents << std::endl;
+    std::cout << "Time Elapsed:      " << setw(10) << elapsed << " s" << std::endl;
+    std::cout << "Throughput:        " << setw(10) << throughputEvt << " events/s" << std::endl << std::endl;
+    std::cout << "(processed " << (byteCounter*N) / 1000000.0 << " MB at " << throughput << " MB/s)" << std::endl;
 
 #ifdef TIMERS
     double throughputEvtNoBuff = (numEvents*N) / (elapsed.count()-elapsedBuffering.count());
-    double throughputNoBuff = mbyteCounter / (elapsed.count()-elapsedBuffering.count());
-    std::cout << "Throughput no buffering:  " << setw(8) << throughputEvtNoBuff << " events/s" << std::endl;
-    std::cout << "                          " << setw(8) << throughputNoBuff << " MB/s" << std::endl;
+    double throughputNoBuff = (byteCounter*N) / (elapsed.count()-elapsedBuffering.count());
+    std::cout << "Throughput no buffering:  " << setw(10) << throughputEvtNoBuff << " events/s" << std::endl;
+    std::cout << "                          " << setw(10) << throughputNoBuff << " MB/s" << std::endl;
 #endif
 
     return EXIT_SUCCESS;

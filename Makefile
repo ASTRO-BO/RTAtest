@@ -19,10 +19,10 @@ mt: mt.cpp
 	$(CXX) $(CXXFLAGS) mt.cpp -o mt -lz -lpacket -pthread -lCTAUtils $(PTHREAD_LIBS)
 
 pwave_serial: pwave_serial.cpp
-	$(CXX) $(CXXFLAGS) -std=c++11 pwave_serial.cpp -o pwave_serial -lpacket -lcfitsio -lCTAConfig -lCTAUtils
+	$(CXX) $(CXXFLAGS) -std=c++11 pwave_serial.cpp -o pwave_serial -lpacket -lcfitsio -lCTAConfig -lCTAUtils -lstdc++
 
 pwave_omp: pwave_serial.cpp
-	$(CXX) $(CXXFLAGS) -std=c++11 -fopenmp -DOMP pwave_serial.cpp -o pwave_omp -lpacket -lcfitsio -lCTAConfig -lCTAUtils
+	$(CXX) $(CXXFLAGS) -std=c++11 -fopenmp -DOMP pwave_serial.cpp -o pwave_omp -lpacket -lcfitsio -lCTAConfig -lCTAUtils -lstdc++
 
 cl: pwave_cl pwave_cl2 pwave_cl3 pwave_cl4
 

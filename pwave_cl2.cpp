@@ -8,7 +8,7 @@
 #include <iomanip>
 
 //#define DEBUG 1
-#define TIMERS 1
+//#define TIMERS 1
 
 using std::chrono::time_point;
 using std::chrono::duration;
@@ -240,9 +240,9 @@ int main(int argc, char *argv[]) {
     std::cout << "Elapsed sum kernel: " << setw(8) << elapsedSum.count() << " s" << std::endl;
     std::cout << "Elapsed max kernel: " << setw(8) << elapsedMax.count() << " s" << std::endl;
     std::cout << "Elapsed copy from:  " << setw(8) << elapsedCopyFrom.count() << " s" << std::endl;
-    double memPerc = elapsed.count() / (elapsedBuffering.count()+elapsedCopyTo.count()+elapsedCopyFrom.count());
+    double memPerc =  (elapsedBuffering.count()+elapsedCopyTo.count()+elapsedCopyFrom.count()) / elapsed.count() * 100;
     std::cout << "Elapsed on memory:  " << setw(8) << memPerc << " %" << std::endl;
-    double kernelPerc = elapsed.count() / (elapsedSum.count()+elapsedMax.count());
+    double kernelPerc = (elapsedSum.count()+elapsedMax.count()) / elapsed.count() * 100;
     std::cout << "Elapsed on kernels: " << setw(8) << kernelPerc << " %" << std::endl;
 #endif
     double throughputEvt = (numEvents*N) / elapsed.count();

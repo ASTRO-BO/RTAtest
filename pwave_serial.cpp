@@ -205,20 +205,30 @@ int main(int argc, char *argv[]) {
 
     time_point<system_clock> end = system_clock::now();
 
-    duration<double> elapsed = end-start;
-    double throughputE = numEvents / elapsed.count();
-    double throughputB = byteCounter / elapsed.count() / 1000000;
-    std::cout << numEvents << " events" << std::endl;
+    duration<double> elapsedD = end-start;
+    double elapsed = elapsedD.count();
+
+    std::cout.setf(ios::fixed);
+    std::cout.precision(2);
 #ifdef TIMERS
-    std::cout << "Elapsed packet  " << std::setprecision(2) << std::fixed << elapsedPacket.count() << std::endl;
+    std::cout << "PARTIAL RESULTS" << std::endl;
+    std::cout << "---------------" << std::endl;
+    std::cout << "Elapsed packet:    " << setw(10) << elapsedPacket.count() << " s" << std::endl;
 #ifndef OMP
-    std::cout << "Elapsed extract " << std::setprecision(2) << std::fixed << elapsedExtract.count() << std::endl;
+    std::cout << "Elapsed extract:   " << setw(10) << elapsedExtract.count() << " s" << std::endl;
 #else
-    std::cout << "Elapsed extract " << std::setprecision(2) << std::fixed << elapsedExtract.count() / omp_get_max_threads() << std::endl;
+    std::cout << "Elapsed extract:   " << setw(10) << elapsedExtract.count() / omp_get_max_threads() << " s" << std::endl;
 #endif
 #endif
-    std::cout << "Elapsed total " << std::setprecision(2) << std::fixed << elapsed.count() << std::endl;
-    std::cout << "throughput: " << throughputE << " events/s - " << throughputB << " MB/s" << std::endl;
+    double throughputEvt = numEvents / elapsed;
+    double throughput = byteCounter / (elapsed * 1000000.0);
+
+    std::cout << std::endl <<  "TOTAL RESULTS" << std::endl;
+    std::cout << "---------------" << std::endl;
+    std::cout << "Number of events:  " << setw(10) << (float)numEvents << std::endl;
+    std::cout << "Time Elapsed:      " << setw(10) << elapsed << " s" << std::endl;
+    std::cout << "Throughput:        " << setw(10) << throughputEvt << " events/s" << std::endl << std::endl;
+    std::cout << "(processed " << byteCounter / 1000000.0 << " MB at " << throughput << " MB/s)" << std::endl;
 
     return EXIT_SUCCESS;
 }
