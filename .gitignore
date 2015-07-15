@@ -1,5 +1,6 @@
 pthreads
 mt
+test_cache
 pwave_serial
 pwave_omp
 pwave_cl

@@ -18,6 +18,9 @@ pthreads: pthreads.c
 mt: mt.cpp
 	$(CXX) $(CXXFLAGS) mt.cpp -o mt -lz -lpacket -pthread -lCTAUtils $(PTHREAD_LIBS)
 
+test_cache: test_cache.cpp
+	$(CXX) -O3 -g -std=c++11 $(CXXFLAGS) test_cache.cpp -o test_cache
+
 pwave_serial: pwave_serial.cpp
 	$(CXX) $(CXXFLAGS) -std=c++11 pwave_serial.cpp -o pwave_serial -lpacket -lcfitsio -lCTAConfig -lCTAUtils -lstdc++
 
@@ -50,4 +53,4 @@ pwave_cl3_altera: pwave_cl3.cpp
 	$(CXX) $(CXXFLAGS) -DCL_ALTERA -std=c++11 -I. `aocl compile-config` pwave_cl3.cpp -o pwave_cl3_altera -lpacket -lcfitsio -lCTAConfig -lCTAUtils -lpthread $(OCL_LIBS) `aocl link-config`
 
 clean:
-	@rm -rf pthreads mt pwave_serial pwave_omp pwave_cl pwave_cl2 pwave_cl3 pwave_cl4 pwave_cl_altera pwave_cl2_altera pwave_cl3_altera
+	@rm -rf pthreads mt pwave_serial pwave_omp pwave_cl pwave_cl2 pwave_cl3 pwave_cl4 pwave_cl_altera pwave_cl2_altera pwave_cl3_altera test_cache
