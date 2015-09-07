@@ -132,7 +132,6 @@ int main(int argc, char *argv[]) {
     std::cout << "Load complete!" << std::endl;
 
     const unsigned int MAX_NPIXELS = 3000;
-    TYPE* buffT = new TYPE[300000];
     TYPE maxBuf[MAX_NPIXELS];
     float timeBuf[MAX_NPIXELS];
 
@@ -157,6 +156,8 @@ int main(int argc, char *argv[]) {
         unsigned int npixels;
         unsigned int nsamples;
         const unsigned int windowSize = 6;
+        TYPE* buffT = new TYPE[300000];
+
         #pragma omp critical
         {
 #ifdef TIMERS
