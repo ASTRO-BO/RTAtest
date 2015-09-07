@@ -13,13 +13,14 @@
 #endif
 
 //#define DEBUG 1
-//#define TIMERS 1
+#define TIMERS 1
+#define TYPE unsigned short
 
 using std::chrono::time_point;
 using std::chrono::duration;
 using std::chrono::system_clock;
 
-void waveExtract(unsigned short* inBuf, unsigned short* maxBuf,
+void waveExtract(TYPE* inBuf, TYPE* maxBuf,
                  float* timeBuf, unsigned int nPixels,
                  unsigned int nSamples, unsigned int windowSize) {
 
@@ -27,15 +28,15 @@ void waveExtract(unsigned short* inBuf, unsigned short* maxBuf,
     for(unsigned int pixelIdx=0; pixelIdx<nPixels; pixelIdx++) {
         unsigned int pixelOff = pixelIdx * nSamples;
 
-        unsigned short sumn = 0;
-        unsigned short sum = 1;
+        TYPE sumn = 0;
+        TYPE sum = 1;
 
         for(unsigned int sliceIdx=0; sliceIdx<windowSize; sliceIdx++) {
             sum += inBuf[pixelOff + sliceIdx];
             sumn += inBuf[pixelOff + sliceIdx] * sliceIdx;
         }
 
-        unsigned short maxv = sum;
+        TYPE maxv = sum;
         float maxt = sumn / (float)sum;
 
         for(unsigned int sampleIdx=1; sampleIdx<nSamples-windowSize; sampleIdx++) {
@@ -54,11 +55,11 @@ void waveExtract(unsigned short* inBuf, unsigned short* maxBuf,
     }
 }
 
-void waveExtract2(unsigned short* inBuf, unsigned short* maxBuf,
+void waveExtract2(TYPE* inBuf, TYPE* maxBuf,
                   float* timeBuf, unsigned int nPixels,
                   unsigned int nSamples, unsigned int windowSize) {
 
-    unsigned short sum[3000][80];
+    TYPE sum[3000][80];
 
     //#pragma omp parallel for default(shared)
     for(unsigned int pixelIdx=0; pixelIdx<nPixels; pixelIdx++) {
@@ -79,10 +80,10 @@ void waveExtract2(unsigned short* inBuf, unsigned short* maxBuf,
     for(unsigned int pixelIdx=0; pixelIdx<nPixels; pixelIdx++) {
         unsigned int pixelOff = pixelIdx * nSamples;
 
-        unsigned short maxSum = 0;
+        TYPE maxSum = 0;
         unsigned int maxSliceIdx = 0;
         for(unsigned int sliceIdx=0; sliceIdx<nSamples-windowSize; sliceIdx++) {
-            unsigned short s = sum[pixelIdx][sliceIdx];
+            TYPE s = sum[pixelIdx][sliceIdx];
             if(s > maxSum) {
                 maxSum = s;
                 maxSliceIdx = sliceIdx;
@@ -131,7 +132,8 @@ int main(int argc, char *argv[]) {
     std::cout << "Load complete!" << std::endl;
 
     const unsigned int MAX_NPIXELS = 3000;
-    unsigned short maxBuf[MAX_NPIXELS];
+    TYPE* buffT = new TYPE[300000];
+    TYPE maxBuf[MAX_NPIXELS];
     float timeBuf[MAX_NPIXELS];
 
     time_point<system_clock> start = system_clock::now();
@@ -180,6 +182,10 @@ int main(int argc, char *argv[]) {
             npixels = teltype->getCameraType()->getNpixels();
             nsamples = teltype->getCameraType()->getPixel(0)->getPixelType()->getNSamples();
 
+            // input data type conversion
+            for(unsigned int i=0; i<npixels*nsamples; i++)
+                buffT[i] = (TYPE) buff[i];
+
 #ifdef TIMERS
             endPacket = system_clock::now();
             elapsedPacket += endPacket - startPacket;
@@ -188,7 +194,7 @@ int main(int argc, char *argv[]) {
         }
 
         // Compute waveform extraction
-        waveExtract2((unsigned short*)buff, maxBuf, timeBuf, npixels, nsamples, windowSize);
+        waveExtract(buffT, maxBuf, timeBuf, npixels, nsamples, windowSize);
 
 
 #ifdef TIMERS
