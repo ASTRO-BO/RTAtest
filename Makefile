@@ -1,7 +1,7 @@
-all: pthreads mt pwave_serial pwave_omp cl altera
+all: pwave_serial pwave_omp
 
-CFLAGS=-O2 -g
-CXXFLAGS=-O2 -g
+CFLAGS=-O2 -g -Wall -Wno-unknown-pragmas
+CXXFLAGS=-O2 -g -Wall -Wno-unknown-pragmas
 
 SYSTEM= $(shell gcc -dumpmachine)
 ifneq (, $(findstring linux, $(SYSTEM)))
@@ -22,10 +22,10 @@ test_cache: test_cache.cpp
 	$(CXX) -O3 -g -std=c++11 $(CXXFLAGS) test_cache.cpp -o test_cache
 
 pwave_serial: pwave_serial.cpp
-	$(CXX) $(CXXFLAGS) -std=c++11 pwave_serial.cpp -o pwave_serial -lpacket -lcfitsio -lCTAConfig -lCTAUtils -lstdc++
+	$(CXX) $(CXXFLAGS) -std=c++11 pwave_serial.cpp -o pwave_serial -lpacket -lCTAConfig -lCTAUtils -lcfitsio -lrt
 
 pwave_omp: pwave_serial.cpp
-	$(CXX) $(CXXFLAGS) -std=c++11 -fopenmp -DOMP pwave_serial.cpp -o pwave_omp -lpacket -lcfitsio -lCTAConfig -lCTAUtils -lstdc++
+	$(CXX) $(CXXFLAGS) -std=c++11 -fopenmp -DOMP pwave_serial.cpp -o pwave_omp -lpacket -lCTAConfig -lCTAUtils -lcfitsio -lrt
 
 cl: pwave_cl pwave_cl2 pwave_cl3 pwave_cl4
 
