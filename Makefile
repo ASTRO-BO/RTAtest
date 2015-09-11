@@ -11,6 +11,15 @@ endif
 ifneq (, $(findstring darwin, $(SYSTEM)))
 	OCL_LIBS = -framework OpenCL
 endif
+ifneq (, $(findstring icpc, $(CXX)))
+	OMP=-fopenmp
+endif
+ifneq (, $(findstring g++, $(CXX)))
+	OMP=-fopenmp
+endif
+ifneq (, $(findstring xlc++, $(CXX)))
+	OMP=-qsmp=omp
+endif
 
 pthreads: pthreads.c
 	$(CC) $(CFLAGS) pthreads.c -o pthreads -pthread $(PTHREAD_LIBS)
@@ -25,7 +34,7 @@ pwave_serial: pwave_serial.cpp
 	$(CXX) $(CXXFLAGS) -std=c++11 pwave_serial.cpp -o pwave_serial -lpacket -lCTAConfig -lCTAUtils -lcfitsio -lrt
 
 pwave_omp: pwave_serial.cpp
-	$(CXX) $(CXXFLAGS) -std=c++11 -fopenmp -DOMP pwave_serial.cpp -o pwave_omp -lpacket -lCTAConfig -lCTAUtils -lcfitsio -lrt
+	$(CXX) $(CXXFLAGS) $(OMP) -std=c++11 -DOMP pwave_serial.cpp -o pwave_omp -lpacket -lCTAConfig -lCTAUtils -lcfitsio -lrt
 
 cl: pwave_cl pwave_cl2 pwave_cl3 pwave_cl4
 
