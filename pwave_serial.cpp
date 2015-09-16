@@ -124,6 +124,8 @@ int main(int argc, char *argv[]) {
                 sumn = sumn - iBuff[pixelOff+prev] * prev + iBuff[pixelOff+succ] * succ;
                 if(sum > maxv) {
                     maxv = sum;
+                }
+                if(sum > maxv) {
                     maxt = (sumn / (float)sum);
                 }
             }
