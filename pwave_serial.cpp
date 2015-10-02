@@ -99,10 +99,11 @@ int main(int argc, char *argv[]) {
     std::cout << "Started .." << std::endl;
     clock_gettime(CLOCK_MONOTONIC, &start);
 
-    #pragma omp parallel
+    // optimal loop (not vectorizable)
+/*    #pragma omp parallel
     for(unsigned int loop=0; loop<loops; loop++) {
 
-/*        #pragma omp for
+        #pragma omp for
         for(unsigned int pixelIdx = 0; pixelIdx < nevents * NPIXELS; pixelIdx++) {
             unsigned int pixelOff = pixelIdx * NSAMPLES;
 
@@ -128,8 +129,13 @@ int main(int argc, char *argv[]) {
                 }
             }
             oBuffMax[pixelIdx] = maxv;
-            oBuffTime[pixelIdx] = maxt;*/
+            oBuffTime[pixelIdx] = maxt;
+        }
+    }*/
 
+    // loop not optimal (but vectorized)
+    #pragma omp parallel
+    for(unsigned int loop=0; loop<loops; loop++) {
         #pragma omp for
         for(unsigned int pixelIdx = 0; pixelIdx < nevents * NPIXELS; pixelIdx++) {
             TYPE sumv[NSAMPLES-WINDOW_SIZE];
@@ -142,7 +148,7 @@ int main(int argc, char *argv[]) {
                 TYPE* iBuffPtr = iBuff + pixelIdx * NSAMPLES + sliceIdx;
                 for(unsigned int sampleIdx=0; sampleIdx<WINDOW_SIZE; sampleIdx++) {
                     sumv[sliceIdx] += iBuffPtr[sampleIdx];
-                    sumvn[sliceIdx] += iBuffPtr[sampleIdx] * sampleIdx;
+                    sumvn[sliceIdx] += iBuffPtr[sampleIdx] * (sliceIdx+sampleIdx);
                 }
             }
 
@@ -157,6 +163,8 @@ int main(int argc, char *argv[]) {
 
             oBuffMax[pixelIdx] = sum;
             oBuffTime[pixelIdx] = sumn / (float)sum;
+        }
+    }
 
 #ifdef DEBUG
 
@@ -164,18 +172,18 @@ int main(int argc, char *argv[]) {
 #pragma omp critical
 {
 #endif
+        for(unsigned int pixelIdx = 0; pixelIdx < nevents * NPIXELS; pixelIdx++) {
             std::cout << "pixel: " << pixelIdx << " samples: ";
             for(unsigned int sampleIdx=0; sampleIdx<NSAMPLES; sampleIdx++)
                 std::cout << iBuff[pixelIdx * NSAMPLES + sampleIdx] << " ";
             std::cout << std::endl;
             std::cout << "max: " << " " << oBuffMax[pixelIdx] << " time: " << oBuffTime[pixelIdx] << std::endl;
+        }
 #ifdef OMP
 }
 #endif
 
 #endif
-        }
-    }
 
     clock_gettime(CLOCK_MONOTONIC, &stop);
     elapsed = timediff(start, stop);
