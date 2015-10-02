@@ -165,8 +165,8 @@ int main(int argc, char *argv[]) {
 {
 #endif
             std::cout << "pixel: " << pixelIdx << " samples: ";
-            for(int sampleIdx=0; sampleIdx<NSAMPLES; sampleIdx++)
-                std::cout << iBuff[pixelOff + sampleIdx] << " ";
+            for(unsigned int sampleIdx=0; sampleIdx<NSAMPLES; sampleIdx++)
+                std::cout << iBuff[pixelIdx * NSAMPLES + sampleIdx] << " ";
             std::cout << std::endl;
             std::cout << "max: " << " " << oBuffMax[pixelIdx] << " time: " << oBuffTime[pixelIdx] << std::endl;
 #ifdef OMP
