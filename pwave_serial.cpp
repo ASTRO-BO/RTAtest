@@ -107,7 +107,7 @@ int main(int argc, char *argv[]) {
             unsigned int pixelOff = pixelIdx * NSAMPLES;
 
             TYPE sumn = 0;
-            TYPE sum = 1;
+            TYPE sum = 0;
 
             for(unsigned int sliceIdx = 0; sliceIdx < WINDOW_SIZE; sliceIdx++) {
                 sum += iBuff[pixelOff + sliceIdx];
