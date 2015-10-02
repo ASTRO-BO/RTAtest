@@ -102,7 +102,7 @@ int main(int argc, char *argv[]) {
     #pragma omp parallel
     for(unsigned int loop=0; loop<loops; loop++) {
 
-        #pragma omp for
+/*        #pragma omp for
         for(unsigned int pixelIdx = 0; pixelIdx < nevents * NPIXELS; pixelIdx++) {
             unsigned int pixelOff = pixelIdx * NSAMPLES;
 
@@ -129,9 +129,37 @@ int main(int argc, char *argv[]) {
                     maxt = (sumn / (float)sum);
                 }
             }
-
             oBuffMax[pixelIdx] = maxv;
-            oBuffTime[pixelIdx] = maxt;
+            oBuffTime[pixelIdx] = maxt;*/
+
+        #pragma omp for
+        for(unsigned int pixelIdx = 0; pixelIdx < nevents * NPIXELS; pixelIdx++) {
+            TYPE* iBuffPtr = iBuff + (pixelIdx * NSAMPLES);
+
+            TYPE sumv[NSAMPLES-WINDOW_SIZE];
+            TYPE sumvn[NSAMPLES-WINDOW_SIZE];
+            for(unsigned int sliceIdx=0; sliceIdx<NSAMPLES-WINDOW_SIZE; sliceIdx++) {
+                sumv[sliceIdx] = 0;
+                sumvn[sliceIdx] = 0;
+            }
+            for(unsigned int sliceIdx=0; sliceIdx<NSAMPLES-WINDOW_SIZE; sliceIdx++) {
+                for(unsigned int sampleIdx=0; sampleIdx<WINDOW_SIZE; sampleIdx++) {
+                    sumv[sliceIdx] += iBuffPtr[sampleIdx];
+                    sumvn[sliceIdx] += iBuffPtr[sampleIdx] * sampleIdx;
+                }
+            }
+
+            TYPE sum = 0;
+            TYPE sumn = 0;
+            for(unsigned int sliceIdx=0; sliceIdx<NSAMPLES-WINDOW_SIZE; sliceIdx++) {
+                if(sumv[sliceIdx] > sum)
+                    sum = sumv[sliceIdx];
+                if(sumv[sliceIdx] > sum)
+                    sumn = sumvn[sliceIdx];
+            }
+
+            oBuffMax[pixelIdx] = sum;
+            oBuffTime[pixelIdx] = sumn / (float)sum;
 
 #ifdef DEBUG
 

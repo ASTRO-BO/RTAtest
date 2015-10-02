@@ -1,7 +1,7 @@
 all: pwave_serial pwave_omp
 
 CFLAGS=-O2 -g -Wall -Wno-unknown-pragmas
-CXXFLAGS=-O2 -g -Wall -Wno-unknown-pragmas
+CXXFLAGS=-O3 -g -Wall -Wno-unknown-pragmas
 
 SYSTEM= $(shell gcc -dumpmachine)
 ifneq (, $(findstring linux, $(SYSTEM)))
