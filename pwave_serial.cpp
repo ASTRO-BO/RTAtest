@@ -124,8 +124,6 @@ int main(int argc, char *argv[]) {
                 sumn = sumn - iBuff[pixelOff+prev] * prev + iBuff[pixelOff+succ] * succ;
                 if(sum > maxv) {
                     maxv = sum;
-                }
-                if(sum > maxv) {
                     maxt = (sumn / (float)sum);
                 }
             }
@@ -134,8 +132,6 @@ int main(int argc, char *argv[]) {
 
         #pragma omp for
         for(unsigned int pixelIdx = 0; pixelIdx < nevents * NPIXELS; pixelIdx++) {
-            TYPE* iBuffPtr = iBuff + (pixelIdx * NSAMPLES);
-
             TYPE sumv[NSAMPLES-WINDOW_SIZE];
             TYPE sumvn[NSAMPLES-WINDOW_SIZE];
             for(unsigned int sliceIdx=0; sliceIdx<NSAMPLES-WINDOW_SIZE; sliceIdx++) {
@@ -143,6 +139,7 @@ int main(int argc, char *argv[]) {
                 sumvn[sliceIdx] = 0;
             }
             for(unsigned int sliceIdx=0; sliceIdx<NSAMPLES-WINDOW_SIZE; sliceIdx++) {
+                TYPE* iBuffPtr = iBuff + pixelIdx * NSAMPLES + sliceIdx;
                 for(unsigned int sampleIdx=0; sampleIdx<WINDOW_SIZE; sampleIdx++) {
                     sumv[sliceIdx] += iBuffPtr[sampleIdx];
                     sumvn[sliceIdx] += iBuffPtr[sampleIdx] * sampleIdx;
@@ -152,10 +149,10 @@ int main(int argc, char *argv[]) {
             TYPE sum = 0;
             TYPE sumn = 0;
             for(unsigned int sliceIdx=0; sliceIdx<NSAMPLES-WINDOW_SIZE; sliceIdx++) {
-                if(sumv[sliceIdx] > sum)
+                if(sumv[sliceIdx] > sum) {
                     sum = sumv[sliceIdx];
-                if(sumv[sliceIdx] > sum)
                     sumn = sumvn[sliceIdx];
+                }
             }
 
             oBuffMax[pixelIdx] = sum;
